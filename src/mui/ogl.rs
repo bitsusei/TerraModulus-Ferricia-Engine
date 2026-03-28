@@ -48,6 +48,7 @@ use std::sync::LazyLock;
 use icu::datetime::fieldsets::T;
 use nalgebra_glm::TMat4;
 use sdl3::pixels::Color;
+use crate::util::{str_from_c, str_to_c};
 
 const VER_2_0: Version = Version::new(2, 0, 0);
 const VER_3_0: Version = Version::new(3, 0, 0);
@@ -165,7 +166,7 @@ fn parse_version(version_str: &str) -> Version {
 }
 
 fn str_from_gl(string: *const GLubyte) -> &'static str {
-	unsafe { CStr::from_ptr(string as *const _).to_str().expect("should be valid utf8") }
+	str_from_c(string as *const _)
 }
 
 pub(crate) fn clear_canvas() {
@@ -379,12 +380,6 @@ pub(super) fn with_new_vert_arr() -> u32 {
 	let vao = gen_vert_arr_obj();
 	unsafe { BindVertexArray(vao); }
 	vao
-}
-
-/// This must not be dropped immediately for ptr access by `.as_str()`.
-pub(super) fn str_to_c(str: impl AsRef<str>) -> CString {
-	let str = str.as_ref();
-	CString::new(str).expect("Cannot create CString")
 }
 
 pub(super) enum ShaderType {
