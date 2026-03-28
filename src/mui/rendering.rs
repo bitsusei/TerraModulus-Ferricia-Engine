@@ -5,10 +5,11 @@
 
 #![allow(private_interfaces)]
 
-use crate::mui::ogl::{buf_obj_with_data, compile_shader, draw_arrays, draw_elements, gen_buf_obj, gen_buf_objs, get_uniform_location, new_shader_program, use_program, use_texture_2d, use_uniform_mat_4, use_vao, vert_attr, vert_attr_arr, with_new_vert_arr, GLHandle, NumType, ShaderType, VertexAttrVariant};
+use std::any::Any;
+use crate::mui::ogl::{buf_obj_with_data, compile_shader, draw_arrays, draw_elements, gen_buf_obj, gen_buf_objs, get_uniform_location, new_shader_program, update_buf_obj, use_program, use_texture_2d, use_uniform_mat_4, use_vao, vert_attr, vert_attr_arr, with_new_vert_arr, GLHandle, NumType, ShaderType, VertexAttrVariant};
 use crate::mui::window::WindowHandle;
 use crate::FerriciaResult;
-use gl::{BindTexture, GenTextures, GenerateMipmap, TexImage2D, TexParameteri, ARRAY_BUFFER, CLAMP_TO_EDGE, ELEMENT_ARRAY_BUFFER, LINES, NEAREST, NEAREST_MIPMAP_LINEAR, RGBA, STATIC_DRAW, TEXTURE_2D, TEXTURE_MAG_FILTER, TEXTURE_MIN_FILTER, TEXTURE_WRAP_S, TEXTURE_WRAP_T, TRIANGLES, UNSIGNED_BYTE};
+use gl::{BindTexture, GenTextures, GenerateMipmap, TexImage2D, TexParameteri, ARRAY_BUFFER, CLAMP_TO_EDGE, DYNAMIC_DRAW, ELEMENT_ARRAY_BUFFER, LINES, NEAREST, NEAREST_MIPMAP_LINEAR, RGBA, STATIC_DRAW, TEXTURE_2D, TEXTURE_MAG_FILTER, TEXTURE_MIN_FILTER, TEXTURE_WRAP_S, TEXTURE_WRAP_T, TRIANGLES, UNSIGNED_BYTE};
 use image::imageops::flip_vertical_in_place;
 use image::ImageReader;
 use nalgebra_glm::{identity, ortho, scaling, translation, vec2, vec2_to_vec3, vec3, TMat4, TVec2};
@@ -296,8 +297,8 @@ impl<'a> DrawableSet<'a> {
 	}
 
 	/// Requires careful management
-	pub(crate) fn prim<T: RenderPrimitive>(&mut self) -> &mut T {
-		unsafe { &mut *(self.prim.as_mut() as *mut dyn RenderPrimitive as *mut T) }
+	pub(crate) unsafe fn prim<T: RenderPrimitive>(&mut self) -> &mut T {
+		unsafe { (self.prim.as_mut() as &mut dyn Any).downcast_mut_unchecked() }
 	}
 
 	pub(crate) fn add_model_transform<'b: 'a>(&mut self, transform: &'b dyn PrimModelTransform) {
@@ -337,7 +338,7 @@ impl<'a> DrawableSet<'a> {
 	}
 }
 
-pub(crate) trait RenderPrimitive {
+pub(crate) trait RenderPrimitive : Any {
 	fn vao(&self) -> u32;
 
 	#[inline]
@@ -346,6 +347,10 @@ pub(crate) trait RenderPrimitive {
 	}
 
 	fn draw(&self);
+
+	unsafe fn set_pos_f32(&self, vec: &[f32]);
+
+	unsafe fn set_pos_f64(&self, vec: &[f64]);
 }
 
 /// All `Geom`s take coordinates as screen coordinates.
@@ -369,7 +374,7 @@ impl SimpleLineGeom {
 			points[0].0, points[0].1,
 			points[1].0, points[1].1,
 		];
-		buf_obj_with_data(ARRAY_BUFFER, vbo, &vertices, STATIC_DRAW);
+		buf_obj_with_data(ARRAY_BUFFER, vbo, &vertices, DYNAMIC_DRAW);
 		vert_attr_arr(0, 2, NumType::Float, 2, 0); // Position
 		Self { vao, vbo, color } // Note: Binding to the VAO remains
 	}
@@ -383,6 +388,18 @@ impl RenderPrimitive for SimpleLineGeom {
 	fn draw(&self) {
 		vert_attr(1, VertexAttrVariant::UbyteNorm4.call(self.color.rgba())); // Color
 		draw_arrays(LINES, Self::NUM_VERTICES);
+	}
+
+	unsafe fn set_pos_f32(&self, vec: &[f32]) {
+		if vec.len() == 4 {
+			update_buf_obj(ARRAY_BUFFER, self.vbo, 0, vec);
+		} else {
+			unimplemented!("Unsupported");
+		}
+	}
+
+	unsafe fn set_pos_f64(&self, _vec: &[f64]) {
+		unimplemented!("Unsupported")
 	}
 }
 
@@ -408,13 +425,12 @@ impl SimpleRectGeom {
 		let vao = with_new_vert_arr();
 		let [vbo, ebo] = gen_buf_objs();
 		let vertices = [
-			// positions
 			points[0], points[3], // top-left
 			points[0], points[1], // bottom-left
 			points[2], points[1], // bottom-right
 			points[2], points[3], // top-right
 		];
-		buf_obj_with_data(ARRAY_BUFFER, vbo, &vertices, STATIC_DRAW);
+		buf_obj_with_data(ARRAY_BUFFER, vbo, &vertices, DYNAMIC_DRAW);
 		buf_obj_with_data(ELEMENT_ARRAY_BUFFER, ebo, &Self::INDICES, STATIC_DRAW);
 		vert_attr_arr(0, 2, NumType::Float, 2, 0); // Position
 		Self { vao, vbo, ebo, color } // Note: Binding to the VAO remains
@@ -429,6 +445,23 @@ impl RenderPrimitive for SimpleRectGeom {
 	fn draw(&self) {
 		vert_attr(1, VertexAttrVariant::UbyteNorm4.call(self.color.rgba())); // Color
 		draw_elements(TRIANGLES, Self::NUM_ELEMENTS);
+	}
+
+	unsafe fn set_pos_f32(&self, vec: &[f32]) {
+		if vec.len() == 4 {
+			update_buf_obj(ARRAY_BUFFER, self.vbo, 0, &[
+				vec[0], vec[3], // top-left
+				vec[0], vec[1], // bottom-left
+				vec[2], vec[1], // bottom-right
+				vec[2], vec[3], // top-right
+			]);
+		} else {
+			unimplemented!("Unsupported");
+		}
+	}
+
+	unsafe fn set_pos_f64(&self, _vec: &[f64]) {
+		unimplemented!("Unsupported")
 	}
 }
 
@@ -458,16 +491,21 @@ impl SpriteMesh {
 		let vao = with_new_vert_arr();
 		let [vbo, ebo] = gen_buf_objs();
 		let vertices: [f32; 16] = [
-			// positions                    // tex coords
-			points[0] as _, points[3] as _, 0.0, 1.0, // top-left
-			points[0] as _, points[1] as _, 0.0, 0.0, // bottom-left
-			points[2] as _, points[1] as _, 1.0, 0.0, // bottom-right
-			points[2] as _, points[3] as _, 1.0, 1.0, // top-right
+			// positions
+			points[0] as _, points[3] as _, // top-left
+			points[0] as _, points[1] as _, // bottom-left
+			points[2] as _, points[1] as _, // bottom-right
+			points[2] as _, points[3] as _, // top-right
+			// tex coords
+			0.0, 1.0, // top-left
+			0.0, 0.0, // bottom-left
+			1.0, 0.0, // bottom-right
+			1.0, 1.0, // top-right
 		];
-		buf_obj_with_data(ARRAY_BUFFER, vbo, &vertices, STATIC_DRAW);
+		buf_obj_with_data(ARRAY_BUFFER, vbo, &vertices, DYNAMIC_DRAW);
 		buf_obj_with_data(ELEMENT_ARRAY_BUFFER, ebo, &Self::INDICES, STATIC_DRAW);
-		vert_attr_arr(0, 2, NumType::Float, 4, 0); // Position
-		vert_attr_arr(1, 2, NumType::Float, 4, 2); // Texture coord
+		vert_attr_arr(0, 2, NumType::Float, 2, 0); // Position
+		vert_attr_arr(1, 2, NumType::Float, 2, 8); // Texture coord
 		Self { vao, vbo, ebo } // Note: Binding to the VAO remains
 	}
 }
@@ -481,6 +519,23 @@ impl RenderPrimitive for SpriteMesh {
 
 	fn draw(&self) {
 		draw_elements(TRIANGLES, Self::NUM_ELEMENTS);
+	}
+
+	unsafe fn set_pos_f32(&self, vec: &[f32]) {
+		if vec.len() == 4 {
+			update_buf_obj(ARRAY_BUFFER, self.vbo, 0, &[
+				vec[0], vec[3], // top-left
+				vec[0], vec[1], // bottom-left
+				vec[2], vec[1], // bottom-right
+				vec[2], vec[3], // top-right
+			]);
+		} else {
+			unimplemented!("Unsupported");
+		}
+	}
+
+	unsafe fn set_pos_f64(&self, _vec: &[f64]) {
+		unimplemented!("Unsupported")
 	}
 }
 
@@ -596,7 +651,7 @@ impl SimpleTranslation {
 	pub(crate) fn new(x: f32, y: f32) -> Self {
 		Self { vec: vec2(x, y) }
 	}
-	
+
 	pub(crate) fn set_vec(&mut self, vec: TVec2<f32>) {
 		self.vec = vec;
 	}
@@ -635,7 +690,7 @@ impl AlphaFilter {
 	pub(crate) fn new(alpha: f32) -> Self {
 		Self { alpha }
 	}
-	
+
 	pub(crate) fn set_alpha(&mut self, alpha: f32) {
 		self.alpha = alpha;
 	}

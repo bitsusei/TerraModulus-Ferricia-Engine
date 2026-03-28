@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: LGPL-3.0-only
  */
 
-#![feature(fn_traits, ptr_metadata)]
+#![feature(fn_traits, ptr_metadata, downcast_unchecked)]
 
 #[cfg(feature = "client")]
 mod mui;
