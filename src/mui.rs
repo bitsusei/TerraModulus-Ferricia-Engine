@@ -25,6 +25,7 @@ pub(crate) mod window;
 mod audio;
 mod oal;
 mod ogl;
+pub(crate) mod rendering3d;
 
 pub(crate) struct SdlHandle {
 	events: EventSubsystem,
