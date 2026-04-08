@@ -4,6 +4,7 @@
  */
 
 #![feature(fn_traits, ptr_metadata, downcast_unchecked, generic_const_exprs)]
+#![feature(box_into_inner)]
 
 #[cfg(feature = "client")]
 mod mui;
@@ -33,8 +34,8 @@ use crate::mui::{
 	SdlHandle,
 };
 use derive_more::From;
-use jni::objects::{JClass, JFloatArray, JIntArray, JObject, JString, ReleaseMode};
-use jni::sys::{jbyte, jfloat, jfloatArray, jint, jintArray, jlong, jlongArray, jobjectArray, jsize, jstring};
+use jni::objects::{JClass, JDoubleArray, JFloatArray, JIntArray, JObject, JString, ReleaseMode};
+use jni::sys::{jbyte, jdoubleArray, jfloat, jfloatArray, jint, jintArray, jlong, jlongArray, jobjectArray, jsize, jstring};
 use jni::JNIEnv;
 use paste::paste;
 use sdl3::pixels::Color;
@@ -44,14 +45,16 @@ use std::env::set_var;
 use std::fmt::Display;
 use std::panic::{catch_unwind, take_hook, AssertUnwindSafe};
 use std::ptr::{from_raw_parts, null};
+use nalgebra_glm::DVec3;
 use crate::mui::rendering::{FullScaling, SimpleRectGeom};
+use crate::phy::{OdePlaceableGeom, PhyBody, PhyEnv, PhyGeom, PhyRawGeom, PhyRawGeomPlaceable, PhyWorld};
 
 #[derive(From)]
 struct FerriciaError(String);
 
 impl FerriciaError {
 	fn throw_jni(self, env: &mut JNIEnv) {
-		handle_jni_error(env.throw_new("terramodulus/util/exception/FerriciaEngineFault", self.0), env);
+		handle_jni_error(env.throw_new("net/terramodulus/util/exception/FerriciaEngineFault", self.0), env);
 	}
 }
 
@@ -339,41 +342,41 @@ jni_ferricia! {
 jni_ferricia! {
 	client:Mui.sdlPoll(mut env: JNIEnv, class: JClass, handle: jlong) -> jobjectArray {
 		let v = jni_ref_ptr::<SdlHandle>(handle).poll();
-		let a = env.new_object_array(v.len() as jsize, "terramodulus/engine/MuiEvent", JObject::null())
+		let a = env.new_object_array(v.len() as jsize, "net/terramodulus/engine/MuiEvent", JObject::null())
 			.expect("Cannot create Java array");
 		v.into_iter().enumerate().for_each(|(i, e)| {
 			let v = match e {
 				MuiEvent::DisplayAdded(handle) => {
 					let p = vec!(jni_to_ptr(handle).into());
-					env.new_object("terramodulus/engine/MuiEvent$DisplayAdded", "(J)V", p.as_slice())
+					env.new_object("net/terramodulus/engine/MuiEvent$DisplayAdded", "(J)V", p.as_slice())
 						.expect("Cannot create Java object")
 				}
 				MuiEvent::DisplayRemoved(handle) => {
 					let p = vec!(jni_to_ptr(handle).into());
-					env.new_object("terramodulus/engine/MuiEvent$DisplayRemoved", "(J)V", p.as_slice())
+					env.new_object("net/terramodulus/engine/MuiEvent$DisplayRemoved", "(J)V", p.as_slice())
 						.expect("Cannot create Java object")
 				}
 				MuiEvent::DisplayMoved(handle) => {
 					let p = vec!(jni_to_ptr(handle).into());
-					env.new_object("terramodulus/engine/MuiEvent$DisplayMoved", "(J)V", p.as_slice())
+					env.new_object("net/terramodulus/engine/MuiEvent$DisplayMoved", "(J)V", p.as_slice())
 						.expect("Cannot create Java object")
 				}
 				MuiEvent::WindowShown => {
-					const CLASS: &str = "terramodulus/engine/MuiEvent$WindowShown";
+					const CLASS: &str = "net/terramodulus/engine/MuiEvent$WindowShown";
 					env.get_static_field(CLASS, "INSTANCE", format!("L{CLASS};"))
 						.expect("Cannot get static field")
 						.l()
 						.expect("JObject is expected")
 				}
 				MuiEvent::WindowHidden => {
-					const CLASS: &str = "terramodulus/engine/MuiEvent$WindowHidden";
+					const CLASS: &str = "net/terramodulus/engine/MuiEvent$WindowHidden";
 					env.get_static_field(CLASS, "INSTANCE", format!("L{CLASS};"))
 						.expect("Cannot get static field")
 						.l()
 						.expect("JObject is expected")
 				}
 				MuiEvent::WindowExposed => {
-					const CLASS: &str = "terramodulus/engine/MuiEvent$WindowExposed";
+					const CLASS: &str = "net/terramodulus/engine/MuiEvent$WindowExposed";
 					env.get_static_field(CLASS, "INSTANCE", format!("L{CLASS};"))
 						.expect("Cannot get static field")
 						.l()
@@ -381,119 +384,119 @@ jni_ferricia! {
 				}
 				MuiEvent::WindowMoved(x, y) => {
 					let p = vec!(x.into(), y.into());
-					env.new_object("terramodulus/engine/MuiEvent$WindowMoved", "(II)V", p.as_slice())
+					env.new_object("net/terramodulus/engine/MuiEvent$WindowMoved", "(II)V", p.as_slice())
 						.expect("Cannot create Java object")
 				}
 				MuiEvent::WindowResized(w, h) => {
 					let p = vec!(w.into(), h.into());
-					env.new_object("terramodulus/engine/MuiEvent$WindowResized", "(II)V", p.as_slice())
+					env.new_object("net/terramodulus/engine/MuiEvent$WindowResized", "(II)V", p.as_slice())
 						.expect("Cannot create Java object")
 				}
 				MuiEvent::WindowPixelSizeChanged(w, h) => {
 					let p = vec!(w.into(), h.into());
-					env.new_object("terramodulus/engine/MuiEvent$WindowPixelSizeChanged", "(II)V", p.as_slice())
+					env.new_object("net/terramodulus/engine/MuiEvent$WindowPixelSizeChanged", "(II)V", p.as_slice())
 						.expect("Cannot create Java object")
 				}
 				MuiEvent::WindowMetalViewResized => {
-					const CLASS: &str = "terramodulus/engine/MuiEvent$WindowMetalViewResized";
+					const CLASS: &str = "net/terramodulus/engine/MuiEvent$WindowMetalViewResized";
 					env.get_static_field(CLASS, "INSTANCE", format!("L{CLASS};"))
 						.expect("Cannot get static field")
 						.l()
 						.expect("JObject is expected")
 				}
 				MuiEvent::WindowMinimized => {
-					const CLASS: &str = "terramodulus/engine/MuiEvent$WindowMinimized";
+					const CLASS: &str = "net/terramodulus/engine/MuiEvent$WindowMinimized";
 					env.get_static_field(CLASS, "INSTANCE", format!("L{CLASS};"))
 						.expect("Cannot get static field")
 						.l()
 						.expect("JObject is expected")
 				}
 				MuiEvent::WindowMaximized => {
-					const CLASS: &str = "terramodulus/engine/MuiEvent$WindowMaximized";
+					const CLASS: &str = "net/terramodulus/engine/MuiEvent$WindowMaximized";
 					env.get_static_field(CLASS, "INSTANCE", format!("L{CLASS};"))
 						.expect("Cannot get static field")
 						.l()
 						.expect("JObject is expected")
 				}
 				MuiEvent::WindowRestored => {
-					const CLASS: &str = "terramodulus/engine/MuiEvent$WindowRestored";
+					const CLASS: &str = "net/terramodulus/engine/MuiEvent$WindowRestored";
 					env.get_static_field(CLASS, "INSTANCE", format!("L{CLASS};"))
 						.expect("Cannot get static field")
 						.l()
 						.expect("JObject is expected")
 				}
 				MuiEvent::WindowMouseEnter => {
-					const CLASS: &str = "terramodulus/engine/MuiEvent$WindowMouseEnter";
+					const CLASS: &str = "net/terramodulus/engine/MuiEvent$WindowMouseEnter";
 					env.get_static_field(CLASS, "INSTANCE", format!("L{CLASS};"))
 						.expect("Cannot get static field")
 						.l()
 						.expect("JObject is expected")
 				}
 				MuiEvent::WindowMouseLeave => {
-					const CLASS: &str = "terramodulus/engine/MuiEvent$WindowMouseLeave";
+					const CLASS: &str = "net/terramodulus/engine/MuiEvent$WindowMouseLeave";
 					env.get_static_field(CLASS, "INSTANCE", format!("L{CLASS};"))
 						.expect("Cannot get static field")
 						.l()
 						.expect("JObject is expected")
 				}
 				MuiEvent::WindowFocusGained => {
-					const CLASS: &str = "terramodulus/engine/MuiEvent$WindowFocusGained";
+					const CLASS: &str = "net/terramodulus/engine/MuiEvent$WindowFocusGained";
 					env.get_static_field(CLASS, "INSTANCE", format!("L{CLASS};"))
 						.expect("Cannot get static field")
 						.l()
 						.expect("JObject is expected")
 				}
 				MuiEvent::WindowFocusLost => {
-					const CLASS: &str = "terramodulus/engine/MuiEvent$WindowFocusLost";
+					const CLASS: &str = "net/terramodulus/engine/MuiEvent$WindowFocusLost";
 					env.get_static_field(CLASS, "INSTANCE", format!("L{CLASS};"))
 						.expect("Cannot get static field")
 						.l()
 						.expect("JObject is expected")
 				}
 				MuiEvent::WindowCloseRequested => {
-					const CLASS: &str = "terramodulus/engine/MuiEvent$WindowCloseRequested";
+					const CLASS: &str = "net/terramodulus/engine/MuiEvent$WindowCloseRequested";
 					env.get_static_field(CLASS, "INSTANCE", format!("L{CLASS};"))
 						.expect("Cannot get static field")
 						.l()
 						.expect("JObject is expected")
 				}
 				MuiEvent::WindowIccProfChanged => {
-					const CLASS: &str = "terramodulus/engine/MuiEvent$WindowIccProfChanged";
+					const CLASS: &str = "net/terramodulus/engine/MuiEvent$WindowIccProfChanged";
 					env.get_static_field(CLASS, "INSTANCE", format!("L{CLASS};"))
 						.expect("Cannot get static field")
 						.l()
 						.expect("JObject is expected")
 				}
 				MuiEvent::WindowOccluded => {
-					const CLASS: &str = "terramodulus/engine/MuiEvent$WindowOccluded";
+					const CLASS: &str = "net/terramodulus/engine/MuiEvent$WindowOccluded";
 					env.get_static_field(CLASS, "INSTANCE", format!("L{CLASS};"))
 						.expect("Cannot get static field")
 						.l()
 						.expect("JObject is expected")
 				}
 				MuiEvent::WindowEnterFullscreen => {
-					const CLASS: &str = "terramodulus/engine/MuiEvent$WindowEnterFullscreen";
+					const CLASS: &str = "net/terramodulus/engine/MuiEvent$WindowEnterFullscreen";
 					env.get_static_field(CLASS, "INSTANCE", format!("L{CLASS};"))
 						.expect("Cannot get static field")
 						.l()
 						.expect("JObject is expected")
 				}
 				MuiEvent::WindowLeaveFullscreen => {
-					const CLASS: &str = "terramodulus/engine/MuiEvent$WindowLeaveFullscreen";
+					const CLASS: &str = "net/terramodulus/engine/MuiEvent$WindowLeaveFullscreen";
 					env.get_static_field(CLASS, "INSTANCE", format!("L{CLASS};"))
 						.expect("Cannot get static field")
 						.l()
 						.expect("JObject is expected")
 				}
 				MuiEvent::WindowDestroyed => {
-					const CLASS: &str = "terramodulus/engine/MuiEvent$WindowDestroyed";
+					const CLASS: &str = "net/terramodulus/engine/MuiEvent$WindowDestroyed";
 					env.get_static_field(CLASS, "INSTANCE", format!("L{CLASS};"))
 						.expect("Cannot get static field")
 						.l()
 						.expect("JObject is expected")
 				}
 				MuiEvent::WindowHdrStateChanged => {
-					const CLASS: &str = "terramodulus/engine/MuiEvent$WindowHdrStateChanged";
+					const CLASS: &str = "net/terramodulus/engine/MuiEvent$WindowHdrStateChanged";
 					env.get_static_field(CLASS, "INSTANCE", format!("L{CLASS};"))
 						.expect("Cannot get static field")
 						.l()
@@ -501,49 +504,49 @@ jni_ferricia! {
 				}
 				MuiEvent::KeyboardKeyDown(id, k) => {
 					let p = vec!((id as jint).into(), (k as u32 as jint).into());
-					env.new_object("terramodulus/engine/MuiEvent$KeyboardKeyDown", "(II)V", p.as_slice())
+					env.new_object("net/terramodulus/engine/MuiEvent$KeyboardKeyDown", "(II)V", p.as_slice())
 						.expect("Cannot create Java object")
 				}
 				MuiEvent::KeyboardKeyUp(id, k) => {
 					let p = vec!((id as jint).into(), (k as u32 as jint).into());
-					env.new_object("terramodulus/engine/MuiEvent$KeyboardKeyUp", "(II)V", p.as_slice())
+					env.new_object("net/terramodulus/engine/MuiEvent$KeyboardKeyUp", "(II)V", p.as_slice())
 						.expect("Cannot create Java object")
 				}
 				MuiEvent::TextEditing(t, s, l) => {
 					let ss = env.new_string(t).expect("Cannot create Java string");
 					let p = vec!((&ss).into(), s.into(), l.into());
-					env.new_object("terramodulus/engine/MuiEvent$TextEditing", "(Ljava/lang/String;II)V", p.as_slice())
+					env.new_object("net/terramodulus/engine/MuiEvent$TextEditing", "(Ljava/lang/String;II)V", p.as_slice())
 						.expect("Cannot create Java object")
 				}
 				MuiEvent::TextInput(t) => {
 					let ss = env.new_string(t).expect("Cannot create Java string");
 					let p = vec!((&ss).into());
-					env.new_object("terramodulus/engine/MuiEvent$TextInput", "(Ljava/lang/String;)V", p.as_slice())
+					env.new_object("net/terramodulus/engine/MuiEvent$TextInput", "(Ljava/lang/String;)V", p.as_slice())
 						.expect("Cannot create Java object")
 				}
 				MuiEvent::KeymapChanged => {
-					const CLASS: &str = "terramodulus/engine/MuiEvent$KeymapChanged";
+					const CLASS: &str = "net/terramodulus/engine/MuiEvent$KeymapChanged";
 					env.get_static_field(CLASS, "INSTANCE", format!("L{CLASS};"))
 						.expect("Cannot get static field")
 						.l()
 						.expect("JObject is expected")
 				}
 				MuiEvent::KeyboardAdded => {
-					const CLASS: &str = "terramodulus/engine/MuiEvent$KeyboardAdded";
+					const CLASS: &str = "net/terramodulus/engine/MuiEvent$KeyboardAdded";
 					env.get_static_field(CLASS, "INSTANCE", format!("L{CLASS};"))
 						.expect("Cannot get static field")
 						.l()
 						.expect("JObject is expected")
 				}
 				MuiEvent::KeyboardRemoved => {
-					const CLASS: &str = "terramodulus/engine/MuiEvent$KeyboardRemoved";
+					const CLASS: &str = "net/terramodulus/engine/MuiEvent$KeyboardRemoved";
 					env.get_static_field(CLASS, "INSTANCE", format!("L{CLASS};"))
 						.expect("Cannot get static field")
 						.l()
 						.expect("JObject is expected")
 				}
 				MuiEvent::TextEditingCandidates => {
-					const CLASS: &str = "terramodulus/engine/MuiEvent$TextEditingCandidates";
+					const CLASS: &str = "net/terramodulus/engine/MuiEvent$TextEditingCandidates";
 					env.get_static_field(CLASS, "INSTANCE", format!("L{CLASS};"))
 						.expect("Cannot get static field")
 						.l()
@@ -551,33 +554,33 @@ jni_ferricia! {
 				}
 				MuiEvent::MouseMotion(id, x, y) => {
 					let p = vec!((id as jint).into(), x.into(), y.into());
-					env.new_object("terramodulus/engine/MuiEvent$MouseMotion", "(IFF)V", p.as_slice())
+					env.new_object("net/terramodulus/engine/MuiEvent$MouseMotion", "(IFF)V", p.as_slice())
 						.expect("Cannot create Java object")
 				}
 				MuiEvent::MouseButtonDown(id, k) => {
 					let p = vec!((id as jint).into(), (k as u8 as jbyte).into());
-					env.new_object("terramodulus/engine/MuiEvent$MouseButtonDown", "(IB)V", p.as_slice())
+					env.new_object("net/terramodulus/engine/MuiEvent$MouseButtonDown", "(IB)V", p.as_slice())
 						.expect("Cannot create Java object")
 				}
 				MuiEvent::MouseButtonUp(id, k) => {
 					let p = vec!((id as jint).into(), (k as u8 as jbyte).into());
-					env.new_object("terramodulus/engine/MuiEvent$MouseButtonUp", "(IB)V", p.as_slice())
+					env.new_object("net/terramodulus/engine/MuiEvent$MouseButtonUp", "(IB)V", p.as_slice())
 						.expect("Cannot create Java object")
 				}
 				MuiEvent::MouseWheel(id, x, y) => {
 					let p = vec!((id as jint).into(), x.into(), y.into());
-					env.new_object("terramodulus/engine/MuiEvent$MouseWheel", "(IFF)V", p.as_slice())
+					env.new_object("net/terramodulus/engine/MuiEvent$MouseWheel", "(IFF)V", p.as_slice())
 						.expect("Cannot create Java object")
 				}
 				MuiEvent::MouseAdded => {
-					const CLASS: &str = "terramodulus/engine/MuiEvent$MouseAdded";
+					const CLASS: &str = "net/terramodulus/engine/MuiEvent$MouseAdded";
 					env.get_static_field(CLASS, "INSTANCE", format!("L{CLASS};"))
 						.expect("Cannot get static field")
 						.l()
 						.expect("JObject is expected")
 				}
 				MuiEvent::MouseRemoved => {
-					const CLASS: &str = "terramodulus/engine/MuiEvent$MouseRemoved";
+					const CLASS: &str = "net/terramodulus/engine/MuiEvent$MouseRemoved";
 					env.get_static_field(CLASS, "INSTANCE", format!("L{CLASS};"))
 						.expect("Cannot get static field")
 						.l()
@@ -585,11 +588,11 @@ jni_ferricia! {
 				}
 				MuiEvent::JoystickAxisMotion(id, a , v) => {
 					let p = vec!((id as jint).into(), (a as jbyte).into(), v.into());
-					env.new_object("terramodulus/engine/MuiEvent$JoystickAxisMotion", "(IBS)V", p.as_slice())
+					env.new_object("net/terramodulus/engine/MuiEvent$JoystickAxisMotion", "(IBS)V", p.as_slice())
 						.expect("Cannot create Java object")
 				}
 				MuiEvent::JoystickBallMotion => {
-					const CLASS: &str = "terramodulus/engine/MuiEvent$JoystickBallMotion";
+					const CLASS: &str = "net/terramodulus/engine/MuiEvent$JoystickBallMotion";
 					env.get_static_field(CLASS, "INSTANCE", format!("L{CLASS};"))
 						.expect("Cannot get static field")
 						.l()
@@ -597,31 +600,31 @@ jni_ferricia! {
 				}
 				MuiEvent::JoystickHatMotion(id, h , s) => {
 					let p = vec!((id as jint).into(), (h as jbyte).into(), (s as u8 as jbyte).into());
-					env.new_object("terramodulus/engine/MuiEvent$JoystickHatMotion", "(IBB)V", p.as_slice())
+					env.new_object("net/terramodulus/engine/MuiEvent$JoystickHatMotion", "(IBB)V", p.as_slice())
 						.expect("Cannot create Java object")
 				}
 				MuiEvent::JoystickButtonDown(id, b) => {
 					let p = vec!((id as jint).into(), (b as jbyte).into());
-					env.new_object("terramodulus/engine/MuiEvent$JoystickButtonDown", "(IB)V", p.as_slice())
+					env.new_object("net/terramodulus/engine/MuiEvent$JoystickButtonDown", "(IB)V", p.as_slice())
 						.expect("Cannot create Java object")
 				}
 				MuiEvent::JoystickButtonUp(id, b) => {
 					let p = vec!((id as jint).into(), (b as jbyte).into());
-					env.new_object("terramodulus/engine/MuiEvent$JoystickButtonUp", "(IB)V", p.as_slice())
+					env.new_object("net/terramodulus/engine/MuiEvent$JoystickButtonUp", "(IB)V", p.as_slice())
 						.expect("Cannot create Java object")
 				}
 				MuiEvent::JoystickAdded(id) => {
 					let p = vec!((id as jint).into());
-					env.new_object("terramodulus/engine/MuiEvent$JoystickAdded", "(I)V", p.as_slice())
+					env.new_object("net/terramodulus/engine/MuiEvent$JoystickAdded", "(I)V", p.as_slice())
 						.expect("Cannot create Java object")
 				}
 				MuiEvent::JoystickRemoved(id) => {
 					let p = vec!((id as jint).into());
-					env.new_object("terramodulus/engine/MuiEvent$JoystickRemoved", "(I)V", p.as_slice())
+					env.new_object("net/terramodulus/engine/MuiEvent$JoystickRemoved", "(I)V", p.as_slice())
 						.expect("Cannot create Java object")
 				}
 				MuiEvent::JoystickBatteryUpdated => {
-					const CLASS: &str = "terramodulus/engine/MuiEvent$JoystickBatteryUpdated";
+					const CLASS: &str = "net/terramodulus/engine/MuiEvent$JoystickBatteryUpdated";
 					env.get_static_field(CLASS, "INSTANCE", format!("L{CLASS};"))
 						.expect("Cannot get static field")
 						.l()
@@ -629,51 +632,51 @@ jni_ferricia! {
 				}
 				MuiEvent::GamepadAxisMotion(id, a , v) => {
 					let p = vec!((id as jint).into(), (a as u8 as jbyte).into(), v.into());
-					env.new_object("terramodulus/engine/MuiEvent$GamepadAxisMotion", "(IBS)V", p.as_slice())
+					env.new_object("net/terramodulus/engine/MuiEvent$GamepadAxisMotion", "(IBS)V", p.as_slice())
 						.expect("Cannot create Java object")
 				}
 				MuiEvent::GamepadButtonDown(id, b) => {
 					let p = vec!((id as jint).into(), (b as jbyte).into());
-					env.new_object("terramodulus/engine/MuiEvent$GamepadButtonDown", "(IB)V", p.as_slice())
+					env.new_object("net/terramodulus/engine/MuiEvent$GamepadButtonDown", "(IB)V", p.as_slice())
 						.expect("Cannot create Java object")
 				}
 				MuiEvent::GamepadButtonUp(id, b) => {
 					let p = vec!((id as jint).into(), (b as jbyte).into());
-					env.new_object("terramodulus/engine/MuiEvent$GamepadButtonUp", "(IB)V", p.as_slice())
+					env.new_object("net/terramodulus/engine/MuiEvent$GamepadButtonUp", "(IB)V", p.as_slice())
 						.expect("Cannot create Java object")
 				}
 				MuiEvent::GamepadAdded(id) => {
 					let p = vec!((id as jint).into());
-					env.new_object("terramodulus/engine/MuiEvent$GamepadAdded", "(I)V", p.as_slice())
+					env.new_object("net/terramodulus/engine/MuiEvent$GamepadAdded", "(I)V", p.as_slice())
 						.expect("Cannot create Java object")
 				}
 				MuiEvent::GamepadRemoved(id) => {
 					let p = vec!((id as jint).into());
-					env.new_object("terramodulus/engine/MuiEvent$GamepadRemoved", "(I)V", p.as_slice())
+					env.new_object("net/terramodulus/engine/MuiEvent$GamepadRemoved", "(I)V", p.as_slice())
 						.expect("Cannot create Java object")
 				}
 				MuiEvent::GamepadRemapped(id) => {
 					let p = vec!((id as jint).into());
-					env.new_object("terramodulus/engine/MuiEvent$GamepadRemapped", "(I)V", p.as_slice())
+					env.new_object("net/terramodulus/engine/MuiEvent$GamepadRemapped", "(I)V", p.as_slice())
 						.expect("Cannot create Java object")
 				}
 				MuiEvent::GamepadTouchpadDown(id, t, f, x, y, p) => {
 					let p = vec!((id as jint).into(), t.into(), f.into(), x.into(), y.into(), p.into());
-					env.new_object("terramodulus/engine/MuiEvent$GamepadTouchpadDown", "(IIIFFF)V", p.as_slice())
+					env.new_object("net/terramodulus/engine/MuiEvent$GamepadTouchpadDown", "(IIIFFF)V", p.as_slice())
 						.expect("Cannot create Java object")
 				}
 				MuiEvent::GamepadTouchpadMotion(id, t, f, x, y, p) => {
 					let p = vec!((id as jint).into(), t.into(), f.into(), x.into(), y.into(), p.into());
-					env.new_object("terramodulus/engine/MuiEvent$GamepadTouchpadMotion", "(IIIFFF)V", p.as_slice())
+					env.new_object("net/terramodulus/engine/MuiEvent$GamepadTouchpadMotion", "(IIIFFF)V", p.as_slice())
 						.expect("Cannot create Java object")
 				}
 				MuiEvent::GamepadTouchpadUp(id, t, f, x, y, p) => {
 					let p = vec!((id as jint).into(), t.into(), f.into(), x.into(), y.into(), p.into());
-					env.new_object("terramodulus/engine/MuiEvent$GamepadTouchpadUp", "(IIIFFF)V", p.as_slice())
+					env.new_object("net/terramodulus/engine/MuiEvent$GamepadTouchpadUp", "(IIIFFF)V", p.as_slice())
 						.expect("Cannot create Java object")
 				}
 				MuiEvent::GamepadSteamHandleUpdated => {
-					const CLASS: &str = "terramodulus/engine/MuiEvent$GamepadSteamHandleUpdated";
+					const CLASS: &str = "net/terramodulus/engine/MuiEvent$GamepadSteamHandleUpdated";
 					env.get_static_field(CLASS, "INSTANCE", format!("L{CLASS};"))
 						.expect("Cannot get static field")
 						.l()
@@ -682,52 +685,52 @@ jni_ferricia! {
 				MuiEvent::DropFile(f) => {
 					let ss = env.new_string(f).expect("Cannot create Java string");
 					let p = vec!((&ss).into());
-					env.new_object("terramodulus/engine/MuiEvent$DropFile", "(Ljava/lang/String;)V", p.as_slice())
+					env.new_object("net/terramodulus/engine/MuiEvent$DropFile", "(Ljava/lang/String;)V", p.as_slice())
 						.expect("Cannot create Java object")
 				}
 				MuiEvent::DropText(t) => {
 					let ss = env.new_string(t).expect("Cannot create Java string");
 					let p = vec!((&ss).into());
-					env.new_object("terramodulus/engine/MuiEvent$DropText", "(Ljava/lang/String;)V", p.as_slice())
+					env.new_object("net/terramodulus/engine/MuiEvent$DropText", "(Ljava/lang/String;)V", p.as_slice())
 						.expect("Cannot create Java object")
 				}
 				MuiEvent::DropBegin => {
-					const CLASS: &str = "terramodulus/engine/MuiEvent$DropBegin";
+					const CLASS: &str = "net/terramodulus/engine/MuiEvent$DropBegin";
 					env.get_static_field(CLASS, "INSTANCE", format!("L{CLASS};"))
 						.expect("Cannot get static field")
 						.l()
 						.expect("JObject is expected")
 				}
 				MuiEvent::DropComplete => {
-					const CLASS: &str = "terramodulus/engine/MuiEvent$DropComplete";
+					const CLASS: &str = "net/terramodulus/engine/MuiEvent$DropComplete";
 					env.get_static_field(CLASS, "INSTANCE", format!("L{CLASS};"))
 						.expect("Cannot get static field")
 						.l()
 						.expect("JObject is expected")
 				}
 				MuiEvent::DropPosition => {
-					const CLASS: &str = "terramodulus/engine/MuiEvent$DropPosition";
+					const CLASS: &str = "net/terramodulus/engine/MuiEvent$DropPosition";
 					env.get_static_field(CLASS, "INSTANCE", format!("L{CLASS};"))
 						.expect("Cannot get static field")
 						.l()
 						.expect("JObject is expected")
 				}
 				MuiEvent::RenderTargetsReset => {
-					const CLASS: &str = "terramodulus/engine/MuiEvent$RenderTargetsReset";
+					const CLASS: &str = "net/terramodulus/engine/MuiEvent$RenderTargetsReset";
 					env.get_static_field(CLASS, "INSTANCE", format!("L{CLASS};"))
 						.expect("Cannot get static field")
 						.l()
 						.expect("JObject is expected")
 				}
 				MuiEvent::RenderDeviceReset => {
-					const CLASS: &str = "terramodulus/engine/MuiEvent$RenderDeviceReset";
+					const CLASS: &str = "net/terramodulus/engine/MuiEvent$RenderDeviceReset";
 					env.get_static_field(CLASS, "INSTANCE", format!("L{CLASS};"))
 						.expect("Cannot get static field")
 						.l()
 						.expect("JObject is expected")
 				}
 				MuiEvent::RenderDeviceLost => {
-					const CLASS: &str = "terramodulus/engine/MuiEvent$RenderDeviceLost";
+					const CLASS: &str = "net/terramodulus/engine/MuiEvent$RenderDeviceLost";
 					env.get_static_field(CLASS, "INSTANCE", format!("L{CLASS};"))
 						.expect("Cannot get static field")
 						.l()
@@ -918,5 +921,48 @@ jni_ferricia! {
 			jni_ref_ptr::<TexProgram>(program_handle),
 			Some(texture_handle as _),
 		)
+	}
+}
+
+jni_ferricia! {
+	Physics.newPhyEnv(mut env: JNIEnv, class: JClass) -> jlong {
+		jni_to_ptr(PhyEnv::new())
+	}
+}
+
+jni_ferricia! {
+	Physics.dropPhyEnv(mut env: JNIEnv, class: JClass, handle: jlong) {
+		jni_drop_with_ptr::<PhyEnv>(handle)
+	}
+}
+
+jni_ferricia! {
+	Physics.newPhyWorld(mut env: JNIEnv, class: JClass, handle: jlong) -> jlong {
+		jni_to_ptr(jni_ref_ptr::<PhyEnv>(handle).create_world())
+	}
+}
+
+jni_ferricia! {
+	Physics.newWorldPhyGeomBox(mut env: JNIEnv, class: JClass, handle: jlong, lengths: jdoubleArray) -> jlong {
+		jni_get_arr!(arr = JDoubleArray; lengths, env);
+		jni_to_ptr(PhyRawGeom::new(
+			jni_ref_ptr::<PhyWorld>(handle).space().create_box(DVec3::new(arr[0] as _, arr[1] as _, arr[2] as _))
+		))
+	}
+}
+
+jni_ferricia! {
+	Physics.setPhyRawGeomPlaceablePosition(mut env: JNIEnv, class: JClass, handle: jlong, pos: jdoubleArray) {
+		jni_get_arr!(arr = JDoubleArray; pos, env);
+		jni_ref_ptr::<PhyRawGeomPlaceable>(handle).set_position(arr[0] as _, arr[1] as _, arr[2] as _);
+	}
+}
+
+jni_ferricia! {
+	Physics.getPhyRawGeomPlaceablePosition(mut env: JNIEnv, class: JClass, handle: jlong) -> jdoubleArray {
+		let r = jni_ref_ptr::<PhyRawGeomPlaceable>(handle).get_position();
+		let arr = env.new_double_array(3).expect("Cannot create Java double array");
+		env.set_double_array_region(&arr, 0, r).expect("Cannot set Java double array");
+		arr.into_raw()
 	}
 }

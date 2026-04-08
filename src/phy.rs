@@ -4,10 +4,17 @@
  */
 use std::collections::LinkedList;
 use std::ops::Deref;
+use std::rc::Rc;
+use by_address::ByAddress;
+use getset::Getters;
 use nalgebra_glm::DVec3;
-use crate::phy::ode::{OdeBody, OdeBox, OdeHandle, OdeNonPlaceableGeom, OdeNonPlaceableMarker, OdePlaceableGeom, OdePlaceableMarker, OdeSpace, OdeSphere, OdeWorld};
+use ordermap::OrderSet;
+use crate::phy::ode::{OdeBody, OdeHandle, OdePlaceabilityMarker, OdeWorld};
+pub use crate::phy::ode::{OdeBox, OdeGeom, OdeGeomNonPlaceable, OdeGeomPlaceable, OdeNonPlaceableGeom, OdeNonPlaceableMarker, OdePlaceableGeom, OdePlaceableMarker, OdeSpace, OdeSphere};
 
 mod ode;
+
+static TICK_FREQUENCY: f64 = 20.0; // 20 Hz OR 1 / 0.05 s
 
 pub struct PhyEnv {
 	ode_handle: OdeHandle,
@@ -31,10 +38,12 @@ impl PhyEnv {
 	}
 }
 
+#[derive(Getters)]
 pub struct PhyWorld {
 	data: OdeWorld,
+	#[get = "pub"]
 	space: TopLevelSpace,
-	objs: LinkedList<Box<dyn PhyObj>>,
+	objs: OrderSet<ByAddress<Rc<Box<dyn PhyObj>>>>,
 }
 
 impl PhyWorld {
@@ -42,8 +51,12 @@ impl PhyWorld {
 		Self {
 			data: handle.create_world(),
 			space: TopLevelSpace::new(),
-			objs: LinkedList::new(),
+			objs: OrderSet::default(),
 		}
+	}
+
+	pub fn tick(&self) {
+		self.data.step(1.0 / TICK_FREQUENCY)
 	}
 }
 
@@ -75,23 +88,80 @@ impl Deref for PhyWorld {
 	}
 }
 
+/// Acting as a simple wrapper handle over complex handling of OdeGeom its referencing.
+pub struct PhyRawGeom<P: OdePlaceabilityMarker> {
+	data: Rc<Box<dyn OdeGeom<Placeability=P>>>,
+}
+
+pub type PhyRawGeomPlaceable = PhyRawGeom<OdePlaceableMarker>;
+pub type PhyRawGeomNonPlaceable = PhyRawGeom<OdeNonPlaceableMarker>;
+
+impl<P: OdePlaceabilityMarker> PhyRawGeom<P> {
+	pub fn new(geom: impl OdeGeom<Placeability=P> + 'static) -> Self {
+		Self { data: Rc::new(Box::new(geom)) }
+	}
+
+	pub fn new_boxed(geom: Box<dyn OdeGeom<Placeability=P>>) -> Self {
+		Self { data: Rc::new(geom) }
+	}
+}
+
+impl<P: OdePlaceabilityMarker> Deref for PhyRawGeom<P> {
+	type Target = dyn OdeGeom<Placeability = P>;
+	fn deref(&self) -> &Self::Target {
+		self.data.as_ref().as_ref()
+	}
+}
+
 pub trait PhyObj {}
 
 pub struct PhyBody {
 	data: Option<OdeBody>,
-	geoms: LinkedList<Box<dyn OdePlaceableGeom<Placeability = OdePlaceableMarker>>>,
+	// Super trait (OdeGeom) has to be used instead of subtrait (OdePlaceableGeom).
+	geoms: OrderSet<ByAddress<Rc<Box<OdeGeomPlaceable>>>>,
 }
 
 impl PhyBody {
 	pub fn new_body() -> Self {
 		todo!()
 	}
+
+	pub fn add_geom(&mut self, geom: &PhyRawGeom<OdePlaceableMarker>) {
+		self.geoms.insert(ByAddress(geom.data.clone()));
+	}
+
+	pub fn remove_geom(&mut self, geom: &PhyRawGeom<OdePlaceableMarker>) {
+		let address = ByAddress(geom.data.clone());
+		self.geoms.remove(&address);
+	}
 }
 
 impl PhyObj for PhyBody {}
 
 pub struct PhyGeom {
-	data: Box<dyn OdeNonPlaceableGeom<Placeability = OdeNonPlaceableMarker>>,
+	// Since this only handles a single OdeGeom, PhyRawGeom can be unused in this scope.
+	data: Box<OdeGeomNonPlaceable>,
+}
+
+impl PhyGeom {
+	pub fn new(geom: impl OdeNonPlaceableGeom + 'static) -> Self {
+		Self { data: Box::new(geom) }
+	}
+
+	pub fn from(geom: PhyRawGeom<OdeNonPlaceableMarker>) -> Self {
+		Self { data: Rc::into_inner(geom.data).expect("must not be in use") }
+	}
+
+	pub fn destruct(self) -> PhyRawGeom<OdeNonPlaceableMarker> {
+		PhyRawGeom::new_boxed(self.data)
+	}
+}
+
+impl Deref for PhyGeom {
+	type Target = OdeGeomNonPlaceable;
+	fn deref(&self) -> &Self::Target {
+		self.data.as_ref()
+	}
 }
 
 impl PhyObj for PhyGeom {}

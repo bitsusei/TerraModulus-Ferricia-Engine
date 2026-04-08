@@ -383,12 +383,15 @@ pub trait OdeGeom : Drop {
 	}
 }
 
-pub trait OdeNonPlaceableGeom : OdeGeom {}
+pub type OdeGeomPlaceable = dyn OdeGeom<Placeability = OdePlaceableMarker>;
+pub type OdeGeomNonPlaceable = dyn OdeGeom<Placeability = OdeNonPlaceableMarker>;
+
+pub trait OdeNonPlaceableGeom : OdeGeom<Placeability = OdeNonPlaceableMarker> {}
 
 impl<T: OdeGeom<Placeability = OdeNonPlaceableMarker>> OdeNonPlaceableGeom for T {}
-impl<T: OdeGeom<Placeability = OdePlaceableMarker>> OdePlaceableGeom for T {}
+impl<T: ?Sized + OdeGeom<Placeability = OdePlaceableMarker>> OdePlaceableGeom for T {}
 
-pub trait OdePlaceableGeom : OdeGeom {
+pub trait OdePlaceableGeom : OdeGeom<Placeability = OdePlaceableMarker> {
 	fn set_body(&self, body: &OdeBody) {
 		unsafe { dGeomSetBody(self.id(), body.id) }
 	}
