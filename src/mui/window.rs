@@ -12,6 +12,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 use getset::Getters;
 use semver::Version;
+use crate::mui::rendering3d::Camera3d;
 use crate::mui::rendering::CanvasHandle;
 
 impl From<WindowBuildError> for FerriciaError {
@@ -56,10 +57,10 @@ impl WindowHandle {
 		self.window.show();
 	}
 
-	pub(crate) fn gl_resize_viewport(&self, canvas_handle: &mut CanvasHandle) {
+	pub(crate) fn gl_resize_viewport(&self, canvas_handle: &mut CanvasHandle, camera: Option<&mut Camera3d>) {
 		let (width, height) = self.window.size_in_pixels();
 		self.gl_handle.gl_resize_viewport(width, height);
-		canvas_handle.refresh_canvas_size(width, height);
+		canvas_handle.refresh_canvas_size(width, height, camera);
 	}
 
 	pub(super) fn window_size_in_pixels(&self) -> (u32, u32) {

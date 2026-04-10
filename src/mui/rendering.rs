@@ -90,9 +90,21 @@ impl CanvasHandle {
 		id
 	}
 
-	pub(crate) fn refresh_canvas_size(&mut self, width: u32, height: u32) {
+	pub(crate) fn refresh_canvas_size(&mut self, width: u32, height: u32, camera: Option<&mut Camera3d>) {
 		self.size = (width, height);
 		self.ortho_proj_mat = ortho_proj_mat(self.size);
+		if let Some(camera) = camera {
+			camera.refresh_canvas_size(self.size)
+		}
+	}
+
+	pub(crate) fn draw_gwr(&self, camera: &Camera3d, obj: DrawableWorldObj, program: &impl GwrProgram) {
+		if self.used_program.get() != program.id() {
+			program.apply();
+			self.used_program.set(program.id());
+		}
+
+		camera.draw(obj, program);
 	}
 
 	pub(crate) fn draw_gui(&self, set: &DrawableSet, program: &impl GuiProgram, texture: Option<u32>) {
@@ -113,8 +125,9 @@ impl CanvasHandle {
 }
 
 pub(crate) use crate::mui::ogl::{clear_canvas, set_clear_color};
+use crate::mui::rendering3d::{Camera3d, DrawableWorldObj, GwrProgram};
 
-struct DrawingContext<'a> {
+pub(super) struct DrawingContext<'a> {
 	window_size: &'a (u32, u32),
 }
 
@@ -126,7 +139,8 @@ fn ortho_proj_mat(size: (u32, u32)) -> TMat4<f32> {
 	ortho::<f32>(0., width as _, 0., height as _, -1., 1.)
 }
 
-fn compile_shader_from(kind: ShaderType, path: String) -> FerriciaResult<u32> {
+/// Not in production
+pub(super) fn compile_shader_from(kind: ShaderType, path: String) -> FerriciaResult<u32> {
 	Ok(compile_shader(read_to_string(path).expect("Cannot read the file"), kind)?)
 }
 
@@ -354,7 +368,7 @@ pub(crate) trait RenderPrimitive : Any {
 }
 
 /// All `Geom`s take coordinates as screen coordinates.
-trait Geom : RenderPrimitive {
+pub(super) trait Geom : RenderPrimitive {
 
 }
 
@@ -391,11 +405,8 @@ impl RenderPrimitive for SimpleLineGeom {
 	}
 
 	unsafe fn set_pos_f32(&self, vec: &[f32]) {
-		if vec.len() == 4 {
-			update_buf_obj(ARRAY_BUFFER, self.vbo, 0, vec);
-		} else {
-			unimplemented!("Unsupported");
-		}
+		assert_eq!(vec.len(), 2 * Self::NUM_VERTICES as usize);
+		update_buf_obj(ARRAY_BUFFER, self.vbo, 0, vec);
 	}
 
 	unsafe fn set_pos_f64(&self, _vec: &[f64]) {
@@ -448,16 +459,13 @@ impl RenderPrimitive for SimpleRectGeom {
 	}
 
 	unsafe fn set_pos_f32(&self, vec: &[f32]) {
-		if vec.len() == 4 {
-			update_buf_obj(ARRAY_BUFFER, self.vbo, 0, &[
-				vec[0], vec[3], // top-left
-				vec[0], vec[1], // bottom-left
-				vec[2], vec[1], // bottom-right
-				vec[2], vec[3], // top-right
-			]);
-		} else {
-			unimplemented!("Unsupported");
-		}
+		assert_eq!(vec.len(), 4);
+		update_buf_obj(ARRAY_BUFFER, self.vbo, 0, &[
+			vec[0], vec[3], // top-left
+			vec[0], vec[1], // bottom-left
+			vec[2], vec[1], // bottom-right
+			vec[2], vec[3], // top-right
+		]);
 	}
 
 	unsafe fn set_pos_f64(&self, _vec: &[f64]) {
@@ -522,16 +530,13 @@ impl RenderPrimitive for SpriteMesh {
 	}
 
 	unsafe fn set_pos_f32(&self, vec: &[f32]) {
-		if vec.len() == 4 {
-			update_buf_obj(ARRAY_BUFFER, self.vbo, 0, &[
-				vec[0], vec[3], // top-left
-				vec[0], vec[1], // bottom-left
-				vec[2], vec[1], // bottom-right
-				vec[2], vec[3], // top-right
-			]);
-		} else {
-			unimplemented!("Unsupported");
-		}
+		assert_eq!(vec.len(), 4);
+		update_buf_obj(ARRAY_BUFFER, self.vbo, 0, &[
+			vec[0], vec[3], // top-left
+			vec[0], vec[1], // bottom-left
+			vec[2], vec[1], // bottom-right
+			vec[2], vec[3], // top-right
+		]);
 	}
 
 	unsafe fn set_pos_f64(&self, _vec: &[f64]) {

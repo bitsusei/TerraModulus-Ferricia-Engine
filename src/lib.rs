@@ -47,6 +47,7 @@ use std::panic::{catch_unwind, take_hook, AssertUnwindSafe};
 use std::ptr::{from_raw_parts, null};
 use nalgebra_glm::DVec3;
 use crate::mui::rendering::{FullScaling, SimpleRectGeom};
+use crate::mui::rendering3d::Camera3d;
 use crate::phy::{OdePlaceableGeom, PhyBody, PhyEnv, PhyGeom, PhyRawGeom, PhyRawGeomPlaceable, PhyWorld};
 
 #[derive(From)]
@@ -745,7 +746,13 @@ jni_ferricia! {
 
 jni_ferricia! {
 	client:Mui.resizeGLViewport(mut env: JNIEnv, class: JClass, handle: jlong, canvas_handle: jlong) {
-		jni_ref_ptr::<WindowHandle>(handle).gl_resize_viewport(jni_ref_ptr::<CanvasHandle>(canvas_handle));
+		jni_ref_ptr::<WindowHandle>(handle).gl_resize_viewport(jni_ref_ptr::<CanvasHandle>(canvas_handle), None);
+	}
+}
+
+jni_ferricia! {
+	client:Mui.resizeGLViewportCamera(mut env: JNIEnv, class: JClass, handle: jlong, canvas_handle: jlong, camera_handle: jlong) {
+		jni_ref_ptr::<WindowHandle>(handle).gl_resize_viewport(jni_ref_ptr::<CanvasHandle>(canvas_handle), Some(jni_ref_ptr::<Camera3d>(camera_handle)));
 	}
 }
 

@@ -48,6 +48,8 @@ nalgebra-glm = "0.19.0"
 num-traits = "0.2.19"
 ordermap = "0.5.2"
 by_address = "1.2.1"
+array-macro = "2.1.8"
+csgrs = "0.20.1"
 
 [features]
 client = []
