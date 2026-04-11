@@ -49,7 +49,7 @@ num-traits = "0.2.19"
 ordermap = "0.5.2"
 by_address = "1.2.1"
 array-macro = "2.1.8"
-csgrs = { version =  "0.20.1", features = ["f32"] }
+csgrs = { version =  "0.20.1", default-features = false, features = ["f32", "delaunay", "offset"] }
 
 [features]
 client = []

@@ -13,30 +13,35 @@ pub mod phy;
 
 #[cfg(feature = "client")]
 use crate::mui::{
-	window::WindowHandle,
 	rendering::{
-		PrimModelTransform,
-		ScalingCenteredTranslateParam,
-		SmartScaling,
-		DrawableSet,
-		GeoProgram,
-		SimpleLineGeom,
-		TexProgram,
 		clear_canvas,
 		set_clear_color,
 		AlphaFilter,
-		PrimColorFilter,
-		SpriteMesh,
 		CanvasHandle,
+		DrawableSet,
+		FullScaling,
+		GeoProgram,
+		PrimColorFilter,
+		PrimModelTransform,
+		ScalingCenteredTranslateParam,
+		SimpleLineGeom,
+		SimpleRectGeom,
 		SimpleTranslation,
+		SmartScaling,
+		SpriteMesh,
+		TexProgram,
 	},
+	rendering3d::{Camera3d, DrawableWorldObj, GwrGeoProgram, SimpleMesh3dGeom},
+	window::WindowHandle,
 	MuiEvent,
 	SdlHandle,
 };
+use crate::phy::{OdePlaceableGeom, PhyEnv, PhyRawGeom, PhyRawGeomPlaceable, PhyWorld};
 use derive_more::From;
 use jni::objects::{JClass, JDoubleArray, JFloatArray, JIntArray, JObject, JString, ReleaseMode};
 use jni::sys::{jbyte, jdouble, jdoubleArray, jfloat, jfloatArray, jint, jintArray, jlong, jlongArray, jobjectArray, jsize, jstring};
 use jni::JNIEnv;
+use nalgebra_glm::{DQuat, DVec3, Vec3};
 use paste::paste;
 use sdl3::pixels::Color;
 use std::backtrace::Backtrace;
@@ -45,10 +50,6 @@ use std::env::set_var;
 use std::fmt::Display;
 use std::panic::{catch_unwind, take_hook, AssertUnwindSafe};
 use std::ptr::{from_raw_parts, null};
-use nalgebra_glm::{DQuat, DVec3, Quat, Vec3};
-use crate::mui::rendering::{FullScaling, SimpleRectGeom};
-use crate::mui::rendering3d::{Camera3d, DrawableWorldObj, GwrGeoProgram, SimpleMesh3dGeom};
-use crate::phy::{OdePlaceableGeom, PhyBody, PhyEnv, PhyGeom, PhyRawGeom, PhyRawGeomPlaceable, PhyWorld};
 
 #[derive(From)]
 struct FerriciaError(String);
@@ -218,7 +219,7 @@ macro_rules! jni_ferricia {
 			#[allow(non_snake_case)]
 			#[allow(clippy::not_unsafe_ptr_arg_deref)]
 			#[unsafe(no_mangle)]
-			pub extern "system" fn [<Java_terramodulus_engine_ferricia_ $class _ $function>]
+			pub extern "system" fn [<Java_net_terramodulus_engine_ferricia_ $class _ $function>]
 			(mut $env: JNIEnv, $($params)*) {
 				run_catch!($body, &mut $env);
 			}
@@ -231,7 +232,7 @@ macro_rules! jni_ferricia {
 			#[allow(non_snake_case)]
 			#[allow(clippy::not_unsafe_ptr_arg_deref)]
 			#[unsafe(no_mangle)]
-			pub extern "system" fn [<Java_terramodulus_engine_ferricia_ $class _ $function>]
+			pub extern "system" fn [<Java_net_terramodulus_engine_ferricia_ $class _ $function>]
 			(mut $env: JNIEnv, $($params)*) -> $ret {
 				return run_catch!($body, $ret, &mut $env);
 			}
@@ -245,7 +246,7 @@ macro_rules! jni_ferricia {
 			#[allow(clippy::not_unsafe_ptr_arg_deref)]
 			#[unsafe(no_mangle)]
 			#[cfg(feature = "client")]
-			pub extern "system" fn [<Java_terramodulus_engine_ferricia_ $class _ $function>]
+			pub extern "system" fn [<Java_net_terramodulus_engine_ferricia_ $class _ $function>]
 			(mut $env: JNIEnv, $($params)*) {
 				run_catch!($body, &mut $env);
 			}
@@ -259,7 +260,7 @@ macro_rules! jni_ferricia {
 			#[allow(clippy::not_unsafe_ptr_arg_deref)]
 			#[unsafe(no_mangle)]
 			#[cfg(feature = "client")]
-			pub extern "system" fn [<Java_terramodulus_engine_ferricia_ $class _ $function>]
+			pub extern "system" fn [<Java_net_terramodulus_engine_ferricia_ $class _ $function>]
 			(mut $env: JNIEnv, $($params)*) -> $ret {
 				return run_catch!($body, $ret, &mut $env);
 			}
@@ -273,7 +274,7 @@ macro_rules! jni_ferricia {
 			#[allow(clippy::not_unsafe_ptr_arg_deref)]
 			#[unsafe(no_mangle)]
 			#[cfg(feature = "server")]
-			pub extern "system" fn [<Java_terramodulus_engine_ferricia_ $class _ $function>]
+			pub extern "system" fn [<Java_net_terramodulus_engine_ferricia_ $class _ $function>]
 			(mut $env: JNIEnv, $($params)*) {
 				run_catch!($body, &mut $env);
 			}
@@ -287,7 +288,7 @@ macro_rules! jni_ferricia {
 			#[allow(clippy::not_unsafe_ptr_arg_deref)]
 			#[unsafe(no_mangle)]
 			#[cfg(feature = "server")]
-			pub extern "system" fn [<Java_terramodulus_engine_ferricia_ $class _ $function>]
+			pub extern "system" fn [<Java_net_terramodulus_engine_ferricia_ $class _ $function>]
 			(mut $env: JNIEnv, $($params)*) -> $ret {
 				return run_catch!($body, $ret, &mut $env);
 			}

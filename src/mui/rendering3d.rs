@@ -315,7 +315,8 @@ impl SimpleMesh3dGeom {
 		let vao = with_new_vert_arr();
 		let [vbo, ebo] = gen_buf_objs();
 		let tri_mesh = mesh.to_trimesh().unwrap();
-		buf_obj_with_data(ARRAY_BUFFER, vbo, tri_mesh.vertices().into_iter().flatten().collect(), DYNAMIC_DRAW);
+		let vertices = tri_mesh.vertices().iter().flat_map(|p| p.iter()).cloned().collect::<Vec<_>>();
+		buf_obj_with_data(ARRAY_BUFFER, vbo, vertices.as_slice(), DYNAMIC_DRAW);
 		buf_obj_with_data(ELEMENT_ARRAY_BUFFER, ebo, tri_mesh.indices().as_flattened(), STATIC_DRAW);
 		vert_attr_arr(0, 3, NumType::Float, 3, 0);
 		Self { vao, vbo, ebo, num_vertices: tri_mesh.vertices().len() as u32, mesh, color }
