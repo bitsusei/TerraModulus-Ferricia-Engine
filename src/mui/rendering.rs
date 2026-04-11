@@ -319,6 +319,10 @@ impl<'a> DrawableSet<'a> {
 		unsafe { (self.prim.as_mut() as &mut dyn Any).downcast_mut_unchecked() }
 	}
 
+	pub(crate) unsafe fn set_prim_pos(&self, pos: &[f32]) { 
+		unsafe { self.prim.set_pos_f32(pos) }
+	}
+
 	pub(crate) fn add_model_transform<'b: 'a>(&mut self, transform: &'b dyn PrimModelTransform) {
 		self.models.insert(transform);
 	}

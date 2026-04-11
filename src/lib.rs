@@ -846,6 +846,13 @@ jni_ferricia! {
 }
 
 jni_ferricia! {
+	client:Mui.setGeomPos(mut env: JNIEnv, class: JClass, handle: jlong, data: jfloatArray) {
+		jni_get_arr!(arr = JFloatArray; data, env);
+		unsafe { jni_ref_ptr::<DrawableSet>(handle).set_prim_pos(&arr) }
+	}
+}
+
+jni_ferricia! {
 	client:Mui.modelSmartScaling(mut env: JNIEnv, class: JClass, data: jintArray) -> jlongArray {
 		jni_get_arr!(arr = JIntArray; data, env);
 		jni_to_destructed_ptr!(SmartScaling::new((arr[0] as _, arr[1] as _), match arr[2] {
