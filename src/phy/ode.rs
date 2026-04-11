@@ -918,24 +918,7 @@ impl OdeMat4 {
 	}
 
 	pub fn to_alg(&self) -> DMat4 {
-		DMat4::new(
-			self.data[0],
-			self.data[1],
-			self.data[2],
-			self.data[3],
-			self.data[4],
-			self.data[5],
-			self.data[6],
-			self.data[7],
-			self.data[8],
-			self.data[9],
-			self.data[10],
-			self.data[11],
-			self.data[12],
-			self.data[13],
-			self.data[14],
-			self.data[15],
-		)
+		DMat4::from_row_slice(&self.data)
 	}
 
 	pub fn as_ptr(&self) -> *const f64 {
@@ -965,20 +948,7 @@ impl OdeMat4x3 {
 	}
 
 	pub fn to_alg(&self) -> DMat4x3 {
-		DMat4x3::new(
-			self.data[0],
-			self.data[1],
-			self.data[2],
-			self.data[3],
-			self.data[4],
-			self.data[5],
-			self.data[6],
-			self.data[7],
-			self.data[8],
-			self.data[9],
-			self.data[10],
-			self.data[11],
-		)
+		DMat4x3::from_row_slice(&self.data)
 	}
 
 	pub fn as_ptr(&self) -> *const f64 {

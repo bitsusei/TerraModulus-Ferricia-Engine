@@ -12,7 +12,7 @@ use crate::FerriciaResult;
 use gl::{BindTexture, GenTextures, GenerateMipmap, TexImage2D, TexParameteri, ARRAY_BUFFER, CLAMP_TO_EDGE, DYNAMIC_DRAW, ELEMENT_ARRAY_BUFFER, LINES, NEAREST, NEAREST_MIPMAP_LINEAR, RGBA, STATIC_DRAW, TEXTURE_2D, TEXTURE_MAG_FILTER, TEXTURE_MIN_FILTER, TEXTURE_WRAP_S, TEXTURE_WRAP_T, TRIANGLES, UNSIGNED_BYTE};
 use image::imageops::flip_vertical_in_place;
 use image::ImageReader;
-use nalgebra_glm::{identity, ortho, scaling, translation, vec2, vec2_to_vec3, vec3, TMat4, TVec2};
+use nalgebra_glm::{identity, ortho, scaling, translation, vec2, vec2_to_vec3, vec3, TMat4, TVec2, Vec3};
 use ordermap::OrderSet;
 use sdl3::pixels::Color;
 use std::borrow::Cow;
@@ -97,8 +97,12 @@ impl CanvasHandle {
 			camera.refresh_canvas_size(self.size)
 		}
 	}
+	
+	pub(crate) fn new_camera(&self, pos: Vec3) -> Camera3d {
+		Camera3d::new(self.size, pos)
+	}
 
-	pub(crate) fn draw_gwr(&self, camera: &Camera3d, obj: DrawableWorldObj, program: &impl GwrProgram) {
+	pub(crate) fn draw_gwr(&self, camera: &Camera3d, obj: &DrawableWorldObj, program: &impl GwrProgram) {
 		if self.used_program.get() != program.id() {
 			program.apply();
 			self.used_program.set(program.id());

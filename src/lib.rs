@@ -35,7 +35,7 @@ use crate::mui::{
 };
 use derive_more::From;
 use jni::objects::{JClass, JDoubleArray, JFloatArray, JIntArray, JObject, JString, ReleaseMode};
-use jni::sys::{jbyte, jdoubleArray, jfloat, jfloatArray, jint, jintArray, jlong, jlongArray, jobjectArray, jsize, jstring};
+use jni::sys::{jbyte, jdouble, jdoubleArray, jfloat, jfloatArray, jint, jintArray, jlong, jlongArray, jobjectArray, jsize, jstring};
 use jni::JNIEnv;
 use paste::paste;
 use sdl3::pixels::Color;
@@ -45,9 +45,9 @@ use std::env::set_var;
 use std::fmt::Display;
 use std::panic::{catch_unwind, take_hook, AssertUnwindSafe};
 use std::ptr::{from_raw_parts, null};
-use nalgebra_glm::DVec3;
+use nalgebra_glm::{DQuat, DVec3, Quat, Vec3};
 use crate::mui::rendering::{FullScaling, SimpleRectGeom};
-use crate::mui::rendering3d::Camera3d;
+use crate::mui::rendering3d::{Camera3d, DrawableWorldObj, GwrGeoProgram, SimpleMesh3dGeom};
 use crate::phy::{OdePlaceableGeom, PhyBody, PhyEnv, PhyGeom, PhyRawGeom, PhyRawGeomPlaceable, PhyWorld};
 
 #[derive(From)]
@@ -812,6 +812,12 @@ jni_ferricia! {
 }
 
 jni_ferricia! {
+	client:Gwr.geoShaders(mut env: JNIEnv, class: JClass, vsh: JString, fsh: JString) -> jlong {
+		jni_res_to_ptr(GwrGeoProgram::new(jni_get_string(&mut env, vsh), jni_get_string(&mut env, fsh)), &mut env)
+	}
+}
+
+jni_ferricia! {
 	client:Mui.newSimpleLineGeom(mut env: JNIEnv, class: JClass, data: jintArray) -> jlong {
 		jni_get_arr!(arr = JIntArray; data, env);
 		jni_to_ptr(DrawableSet::new(SimpleLineGeom::new(
@@ -932,6 +938,73 @@ jni_ferricia! {
 }
 
 jni_ferricia! {
+	client:Gwr.newCamera(
+		mut env: JNIEnv,
+		class: JClass,
+		canvas_handle: jlong,
+		data: jfloatArray,
+	) -> jlong {
+		jni_get_arr!(arr = JFloatArray; data, env);
+		jni_to_ptr(jni_ref_ptr::<CanvasHandle>(canvas_handle).new_camera(Vec3::new(arr[0], arr[1], arr[2])))
+	}
+}
+
+jni_ferricia! {
+	client:Gwr.refreshCameraPos(
+		mut env: JNIEnv,
+		class: JClass,
+		camera_handle: jlong,
+		data: jfloatArray,
+	) -> jlong {
+		jni_get_arr!(arr = JFloatArray; data, env);
+		jni_to_ptr(jni_ref_ptr::<Camera3d>(camera_handle).refresh_pos(Vec3::new(arr[0], arr[1], arr[2])))
+	}
+}
+
+jni_ferricia! {
+	client:Gwr.newMeshGeomCube(mut env: JNIEnv, class: JClass, width: jfloat, data: jintArray) -> jlong {
+		jni_get_arr!(arr = JIntArray; data, env);
+		jni_to_ptr(DrawableWorldObj::new(SimpleMesh3dGeom::new_cube(width, Color::RGBA(arr[0] as _, arr[1] as _, arr[2] as _, arr[3] as _))))
+	}
+}
+
+jni_ferricia! {
+	client:Gwr.newMeshGeomSphere(mut env: JNIEnv, class: JClass, radius: jfloat, data: jintArray) -> jlong {
+		jni_get_arr!(arr = JIntArray; data, env);
+		jni_to_ptr(DrawableWorldObj::new(SimpleMesh3dGeom::new_sphere(radius, Color::RGBA(arr[0] as _, arr[1] as _, arr[2] as _, arr[3] as _))))
+	}
+}
+
+jni_ferricia! {
+	client:Gwr.updateWorldObjModel(mut env: JNIEnv, class: JClass, obj_handle: jlong, data1: jfloatArray, data2: jdoubleArray) {
+		jni_get_arr!(arr1 = JFloatArray; data1, env);
+		jni_get_arr!(arr2 = JDoubleArray; data2, env);
+		jni_ref_ptr::<DrawableWorldObj>(obj_handle).update_model(
+			Vec3::new(arr1[0], arr1[1], arr1[2]),
+			DQuat::new(arr2[0], arr2[1], arr2[2], arr2[3]),
+			Vec3::new(arr1[3], arr1[4], arr1[5]),
+		)
+	}
+}
+
+jni_ferricia! {
+	client:Gwr.drawGwrObj(
+		mut env: JNIEnv,
+		class: JClass,
+		canvas_handle: jlong,
+		camera_handle: jlong,
+		obj_handle: jlong,
+		program_handle: jlong,
+	) {
+		jni_ref_ptr::<CanvasHandle>(canvas_handle).draw_gwr(
+			jni_ref_ptr::<Camera3d>(camera_handle),
+			jni_ref_ptr::<DrawableWorldObj>(obj_handle),
+			jni_ref_ptr::<GwrGeoProgram>(program_handle),
+		)
+	}
+}
+
+jni_ferricia! {
 	Physics.newPhyEnv(mut env: JNIEnv, class: JClass) -> jlong {
 		jni_to_ptr(PhyEnv::new())
 	}
@@ -954,6 +1027,14 @@ jni_ferricia! {
 		jni_get_arr!(arr = JDoubleArray; lengths, env);
 		jni_to_ptr(PhyRawGeom::new(
 			jni_ref_ptr::<PhyWorld>(handle).space().create_box(DVec3::new(arr[0] as _, arr[1] as _, arr[2] as _))
+		))
+	}
+}
+
+jni_ferricia! {
+	Physics.newWorldPhyGeomSphere(mut env: JNIEnv, class: JClass, handle: jlong, radius: jdouble) -> jlong {
+		jni_to_ptr(PhyRawGeom::new(
+			jni_ref_ptr::<PhyWorld>(handle).space().create_sphere(radius)
 		))
 	}
 }

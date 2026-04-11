@@ -40,12 +40,16 @@
 use crate::mui::ogl::{buf_obj_with_data, draw_arrays, draw_elements, gen_buf_obj, gen_buf_objs, get_uniform_location, new_shader_program, update_buf_obj, use_program, use_uniform_mat_4, vert_attr, vert_attr_arr, with_new_vert_arr, NumType, ShaderType, VertexAttrVariant};
 use crate::mui::rendering::{compile_shader_from, DrawableSet, DrawingContext, Geom, GuiProgram, RenderPrimitive};
 use gl::{ARRAY_BUFFER, DYNAMIC_DRAW, ELEMENT_ARRAY_BUFFER, LINES, STATIC_DRAW, TRIANGLES};
-use nalgebra_glm::{identity, look_at, ortho, quat_to_mat4, rotate_x, rotation, scale, translate, Mat4, Quat, TMat4, Vec3, Vec4};
+use nalgebra_glm::{identity, look_at, ortho, quat_to_mat4, rotate_x, rotation, scale, translate, DQuat, Mat4, Quat, TMat4, Vec3, Vec4};
 use sdl3::pixels::Color;
 use std::cell::Cell;
 use std::f32::consts::PI;
 use std::sync::LazyLock;
 use array_macro::array;
+use csgrs::mesh::Mesh;
+use csgrs::mesh::vertex::Vertex;
+use csgrs::traits::CSG;
+use futures::StreamExt;
 use getset::Getters;
 use crate::FerriciaResult;
 
@@ -73,13 +77,13 @@ impl Camera3d {
 		self.proj_mat = ortho_proj_mat(canvas_size);
 	}
 
-	pub(super) fn refresh_pos(&mut self, pos: Vec3) {
+	pub(crate) fn refresh_pos(&mut self, pos: Vec3) {
 		self.view_mat = look_view_mat(pos);
 	}
 
-	pub(super) fn draw(&self, obj: DrawableWorldObj, program: &impl GwrProgram) {
+	pub(super) fn draw(&self, obj: &DrawableWorldObj, program: &impl GwrProgram) {
 		obj.prim.apply_vao();
-		program.uniform(&self.proj_mat, &self.view_mat, &obj);
+		program.uniform(&self.proj_mat, &self.view_mat, obj);
 		obj.prim.draw();
 	}
 }
@@ -104,7 +108,7 @@ pub(crate) trait GwrProgram {
 	fn uniform(&self, proj: &Mat4, view: &Mat4, obj: &DrawableWorldObj);
 }
 
-pub(crate) struct GeoProgram {
+pub(crate) struct GwrGeoProgram {
 	id: u32,
 	model_pos: u32,
 	view_pos: u32,
@@ -112,7 +116,7 @@ pub(crate) struct GeoProgram {
 	filter_pos: u32,
 }
 
-impl GeoProgram {
+impl GwrGeoProgram {
 	pub(crate) fn new(vsh: String, fsh: String) -> FerriciaResult<Self> {
 		let id = new_shader_program([
 			compile_shader_from(ShaderType::Vertex, vsh)?,
@@ -128,7 +132,7 @@ impl GeoProgram {
 	}
 }
 
-impl GwrProgram for GeoProgram {
+impl GwrProgram for GwrGeoProgram {
 	fn id(&self) -> u32 {
 		self.id
 	}
@@ -167,8 +171,8 @@ impl DrawableWorldObj {
 
 	/// Scaling matrix from `[-1, 1]` to a form; for example, times .5 to size of one meter.
 	/// Position must be based on values of the Center of Gravity (CoG).
-	pub fn update_model(&mut self, pos: Vec3, q: Quat, scaling: Vec3) {
-		let m = quat_to_mat4(&q); // Rotation
+	pub fn update_model(&mut self, pos: Vec3, q: DQuat, scaling: Vec3) {
+		let m = quat_to_mat4(&q).cast(); // Rotation
 		let m = scale(&m, &scaling); // Scaling
 		self.model = translate(&m, &pos); // Translation from Origin to World Coordinates by CoG
 	}
@@ -286,12 +290,60 @@ impl SimpleBox3dGeom {
 	const NUM_ELEMENTS: u32 = 36; // Each triangle contains three elements
 
 	pub(crate) fn new(points: [Vec3; 2], color: Color) -> Self {
-		let vao = with_new_vert_arr();
-		let [vbo, ebo] = gen_buf_objs();
-		let vertices = points.iter().flat_map(|e| e.as_slice()).cloned().collect::<Vec<_>>();
-		buf_obj_with_data(ARRAY_BUFFER, vbo, vertices.as_slice(), DYNAMIC_DRAW);
-		buf_obj_with_data(ELEMENT_ARRAY_BUFFER, ebo, &Self::INDICES, STATIC_DRAW);
-		vert_attr_arr(0, 3, NumType::Float, 3, 0); // Position
-		Self { vao, vbo, ebo, color } // Note: Binding to the VAO remains
+		todo!("TBA");
 	}
 }
+
+/// Utilizing CSG's [Mesh]
+pub(crate) struct SimpleMesh3dGeom {
+	vao: u32,
+	vbo: u32,
+	ebo: u32,
+	mesh: Mesh<()>,
+	num_vertices: u32,
+	color: Color,
+}
+
+impl SimpleMesh3dGeom {
+	pub(crate) fn new_cube(width: f32, color: Color) -> Self {
+		// Has to be centered for Rotation matrix to work correctly, if correct.
+		let mesh = Mesh::cube(width, None).translate(-width / 2.0, -width / 2.0, -width / 2.0);
+		Self::new_mesh_centered(mesh, color)
+	}
+
+	fn new_mesh_centered(mesh: Mesh<()>, color: Color) -> Self {
+		let vao = with_new_vert_arr();
+		let [vbo, ebo] = gen_buf_objs();
+		let tri_mesh = mesh.to_trimesh().unwrap();
+		buf_obj_with_data(ARRAY_BUFFER, vbo, tri_mesh.vertices().into_iter().flatten().collect(), DYNAMIC_DRAW);
+		buf_obj_with_data(ELEMENT_ARRAY_BUFFER, ebo, tri_mesh.indices().as_flattened(), STATIC_DRAW);
+		vert_attr_arr(0, 3, NumType::Float, 3, 0);
+		Self { vao, vbo, ebo, num_vertices: tri_mesh.vertices().len() as u32, mesh, color }
+	}
+
+	pub(crate) fn new_sphere(radius: f32, color: Color) -> Self {
+		let mesh = Mesh::sphere(radius, 20, 10, None).translate(-radius, -radius, -radius);
+		Self::new_mesh_centered(mesh, color)
+	}
+}
+
+impl RenderPrimitive for SimpleMesh3dGeom {
+	fn vao(&self) -> u32 {
+		self.vao
+	}
+
+	fn draw(&self) {
+		vert_attr(1, VertexAttrVariant::UbyteNorm4.call(self.color.rgba())); // Color
+		draw_elements(TRIANGLES, self.num_vertices);
+	}
+
+	unsafe fn set_pos_f32(&self, _vec: &[f32]) {
+		unimplemented!("Unsupported")
+	}
+
+	unsafe fn set_pos_f64(&self, _vec: &[f64]) {
+		unimplemented!("Unsupported")
+	}
+}
+
+impl Geom for SimpleMesh3dGeom {}
