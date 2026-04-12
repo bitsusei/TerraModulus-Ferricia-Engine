@@ -90,7 +90,17 @@ impl Camera3d {
 
 fn ortho_proj_mat(size: (u32, u32)) -> Mat4 {
 	let (width, height) = size;
-	ortho(0., width as _, 0., height as _, f32::NEG_INFINITY, f32::INFINITY)
+	// Using GLM's ortho causes problematic result on INF by (0, width, 0, height, -INF, INF)
+	// [ 2 / width,          0,      0, -1,
+	//           0, 2 / height,      0, -1,
+	//           0,          0,      0,  0,
+	//           0,          0,      0,  1, ]
+	Mat4::new(
+		2. / width as f32, 0., 0., -1.,
+		0., 2. / height as f32, 0., -1.,
+		0., 0., 0., 0.,
+		0., 0., 0., 1.,
+	)
 }
 
 fn look_view_mat(pos: Vec3) -> Mat4 {

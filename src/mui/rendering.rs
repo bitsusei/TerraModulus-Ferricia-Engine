@@ -97,7 +97,7 @@ impl CanvasHandle {
 			camera.refresh_canvas_size(self.size)
 		}
 	}
-	
+
 	pub(crate) fn new_camera(&self, pos: Vec3) -> Camera3d {
 		Camera3d::new(self.size, pos)
 	}
@@ -319,7 +319,7 @@ impl<'a> DrawableSet<'a> {
 		unsafe { (self.prim.as_mut() as &mut dyn Any).downcast_mut_unchecked() }
 	}
 
-	pub(crate) unsafe fn set_prim_pos(&self, pos: &[f32]) { 
+	pub(crate) unsafe fn set_prim_pos(&self, pos: &[f32]) {
 		unsafe { self.prim.set_pos_f32(pos) }
 	}
 

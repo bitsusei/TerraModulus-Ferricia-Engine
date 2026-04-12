@@ -5,6 +5,7 @@
 
 #![feature(fn_traits, ptr_metadata, downcast_unchecked, generic_const_exprs)]
 #![feature(box_into_inner)]
+#![feature(breakpoint)]
 
 #[cfg(feature = "client")]
 mod mui;
