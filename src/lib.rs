@@ -964,9 +964,20 @@ jni_ferricia! {
 		class: JClass,
 		camera_handle: jlong,
 		data: jfloatArray,
-	) -> jlong {
+	) {
 		jni_get_arr!(arr = JFloatArray; data, env);
-		jni_to_ptr(jni_ref_ptr::<Camera3d>(camera_handle).refresh_pos(Vec3::new(arr[0], arr[1], arr[2])))
+		jni_ref_ptr::<Camera3d>(camera_handle).refresh_pos(Vec3::new(arr[0], arr[1], arr[2]))
+	}
+}
+
+jni_ferricia! {
+	client:Gwr.setCameraZoomLevel(
+		mut env: JNIEnv,
+		class: JClass,
+		camera_handle: jlong,
+		data: jfloat,
+	) {
+		jni_ref_ptr::<Camera3d>(camera_handle).set_zoom_level(data)
 	}
 }
 

@@ -40,7 +40,7 @@
 use crate::mui::ogl::{buf_obj_with_data, draw_arrays, draw_elements, gen_buf_obj, gen_buf_objs, get_uniform_location, new_shader_program, update_buf_obj, use_program, use_uniform_mat_4, vert_attr, vert_attr_arr, with_new_vert_arr, NumType, ShaderType, VertexAttrVariant};
 use crate::mui::rendering::{compile_shader_from, DrawableSet, DrawingContext, Geom, GuiProgram, RenderPrimitive};
 use gl::{ARRAY_BUFFER, DYNAMIC_DRAW, ELEMENT_ARRAY_BUFFER, LINES, STATIC_DRAW, TRIANGLES};
-use nalgebra_glm::{identity, look_at, ortho, quat_to_mat4, rotate_x, rotation, scale, translate, DQuat, Mat4, Quat, TMat4, Vec3, Vec4};
+use nalgebra_glm::{identity, look_at, ortho, quat_to_mat4, rotate_x, rotation, scale, scaling, translate, translation, DQuat, Mat4, Quat, TMat4, Vec3, Vec4};
 use sdl3::pixels::Color;
 use std::cell::Cell;
 use std::f32::consts::PI;
@@ -58,27 +58,35 @@ static CAMERA_UP: Vec3 = Vec3::new(0.0, 1.0, 0.0);
 static ELEVATION: f32 = 100.;
 static INCLINATION: LazyLock<Vec3> = LazyLock::new(|| // in World coordinate system
 	(Mat4::new_rotation(Vec3::new(PI * 30. / 180., 0., 0.)) * Vec4::new(0., 1., 0., 0.)).xyz());
+static STANDARD_SCALING: f32 = 64.;
 
 pub(crate) struct Camera3d {
 	proj_mat: Mat4,
 	view_mat: Mat4,
+	zoom_level: f32,
 }
 
 impl Camera3d {
 	/// Position is the position where the Camera is at.
 	pub(super) fn new(canvas_size: (u32, u32), pos: Vec3) -> Self {
 		Self {
-			proj_mat: ortho_proj_mat(canvas_size),
+			proj_mat: ortho_proj_mat(canvas_size, STANDARD_SCALING),
 			view_mat: look_view_mat(pos),
+			zoom_level: 1.0,
 		}
 	}
 
 	pub(super) fn refresh_canvas_size(&mut self, canvas_size: (u32, u32)) {
-		self.proj_mat = ortho_proj_mat(canvas_size);
+		self.proj_mat = ortho_proj_mat(canvas_size, self.zoom_level * STANDARD_SCALING);
 	}
 
 	pub(crate) fn refresh_pos(&mut self, pos: Vec3) {
 		self.view_mat = look_view_mat(pos);
+	}
+
+	/// Zoom level is the factor based on the Standard Scaling.
+	pub(crate) fn set_zoom_level(&mut self, zoom_level: f32) {
+		self.zoom_level = zoom_level;
 	}
 
 	pub(super) fn draw(&self, obj: &DrawableWorldObj, program: &impl GwrProgram) {
@@ -88,19 +96,34 @@ impl Camera3d {
 	}
 }
 
-fn ortho_proj_mat(size: (u32, u32)) -> Mat4 {
+fn ortho_proj_mat(size: (u32, u32), scale: f32) -> Mat4 {
 	let (width, height) = size;
-	// Using GLM's ortho causes problematic result on INF by (0, width, 0, height, -INF, INF)
-	// [ 2 / width,          0,      0, -1,
-	//           0, 2 / height,      0, -1,
-	//           0,          0,      0,  0,
-	//           0,          0,      0,  1, ]
+	let scale = Vec3::new(scale, scale, 0.);
+	// Centering offset of Camera
+	let offset = Vec3::new(width as f32 / 2., height as f32 / 2., 0.);
+	// Using GLM's `ortho` causes problematic result on INF by (0, width, 0, height, -INF, INF)
+	// Where bottom-left is the origin,
+	// [ 2/(r-l),        0,        0, -(r+l)/(r-l),
+	//          0, 2/(t-b),        0, -(t+b)/(t-b),
+	//          0,       0, -2/(f-n), -(f+n)/(f-n),
+	//          0,       0,        0,            1 ]
+	// Substitute w=r, l=0, h=t, b=0, f=∞ and n=-∞,
+	// [ 2/w,   0,        0,         -w/w,
+	//     0, 2/h,        0,         -h/h,
+	//     0,   0, -2/(∞+∞), -(∞-∞)/(∞+∞),
+	//     0,   0,        0,            1 ]
+	// Note that lim -2/(∞+∞) = lim -1/∞ = 0,
+	// and lim -(∞-∞)/(∞+∞) = lim -0/2∞ = 0:
+	// [ 2/w,   0, 0, -1,
+	//     0, 2/h, 0, -1,
+	//     0,   0, 0,  0,
+	//     0,   0, 0,  1 ]
 	Mat4::new(
 		2. / width as f32, 0., 0., -1.,
 		0., 2. / height as f32, 0., -1.,
 		0., 0., 0., 0.,
 		0., 0., 0., 1.,
-	)
+	) * translation(&offset) * scaling(&scale)
 }
 
 fn look_view_mat(pos: Vec3) -> Mat4 {
