@@ -38,26 +38,22 @@
 //!
 //! [Canvas]: super::rendering::CanvasHandle
 use crate::mui::ogl::{buf_obj_with_data, draw_arrays, draw_elements, gen_buf_obj, gen_buf_objs, get_uniform_location, new_shader_program, update_buf_obj, use_program, use_uniform_mat_4, vert_attr, vert_attr_arr, with_new_vert_arr, NumType, ShaderType, VertexAttrVariant};
-use crate::mui::rendering::{compile_shader_from, DrawableSet, DrawingContext, Geom, GuiProgram, RenderPrimitive};
-use gl::{ARRAY_BUFFER, DYNAMIC_DRAW, ELEMENT_ARRAY_BUFFER, LINES, STATIC_DRAW, TRIANGLES};
-use nalgebra_glm::{identity, look_at, ortho, quat_to_mat4, rotate_x, rotation, scale, scaling, translate, translation, DQuat, Mat4, Quat, TMat4, Vec3, Vec4};
-use sdl3::pixels::Color;
-use std::cell::Cell;
-use std::f32::consts::PI;
-use std::sync::LazyLock;
+use crate::mui::rendering::{compile_shader_from, Geom, RenderPrimitive};
+use crate::FerriciaResult;
 use array_macro::array;
 use csgrs::mesh::Mesh;
-use csgrs::mesh::vertex::Vertex;
 use csgrs::traits::CSG;
-use futures::StreamExt;
-use getset::Getters;
-use crate::FerriciaResult;
+use gl::{ARRAY_BUFFER, DYNAMIC_DRAW, ELEMENT_ARRAY_BUFFER, LINES, STATIC_DRAW, TRIANGLES};
+use nalgebra_glm::{identity, look_at, quat_to_mat4, scale, scaling, translate, translation, DQuat, Mat4, Vec3, Vec4};
+use sdl3::pixels::Color;
+use std::f32::consts::PI;
+use std::sync::LazyLock;
 
 static IDENT_MAT_4: LazyLock<Mat4> = LazyLock::new(identity);
-static CAMERA_UP: Vec3 = Vec3::new(0.0, 1.0, 0.0);
-static ELEVATION: f32 = 100.;
-static INCLINATION: LazyLock<Vec3> = LazyLock::new(|| // in World coordinate system
-	(Mat4::new_rotation(Vec3::new(PI * 30. / 180., 0., 0.)) * Vec4::new(0., 1., 0., 0.)).xyz());
+/// It should be rotating about x-axis with -60 degrees, but somehow this function is treating
+/// parameters the opposite sign. This literally means 60 degrees, but when computed,
+/// it is the result as if the value of -60 degrees is inputted.
+static CAMERA_DIR: LazyLock<Mat4> = LazyLock::new(|| Mat4::new_rotation(Vec3::new(PI / 3., 0., 0.)));
 static STANDARD_SCALING: f32 = 64.;
 
 pub(crate) struct Camera3d {
@@ -67,7 +63,7 @@ pub(crate) struct Camera3d {
 }
 
 impl Camera3d {
-	/// Position is the position where the Camera is at.
+	/// Position is the position where the Camera is at (position of the Player character).
 	pub(super) fn new(canvas_size: (u32, u32), pos: Vec3) -> Self {
 		Self {
 			proj_mat: ortho_proj_mat(canvas_size, STANDARD_SCALING),
@@ -127,9 +123,18 @@ fn ortho_proj_mat(size: (u32, u32), scale: f32) -> Mat4 {
 }
 
 fn look_view_mat(pos: Vec3) -> Mat4 {
-	let mut eye = pos;
-	eye.y = ELEVATION;
-	look_at(&pos, &eye, &INCLINATION)
+	// Originally, look_at(&pos, &CAMERA_TARGET, &CAMERA_UP) was used, but the result is awkward.
+	// Where:
+	//   INCLINATION = Mat4::new_rotation(Vec3::new(PI / 3., 0., 0.));
+	//   CAMERA_UP = (INCLINATION * Vec4::new(0., 0., -1., 0.)).xyz();
+	//   CAMERA_TARGET = (INCLINATION * Vec4::new(0., -1., 0., 0.)).xyz();
+	// This means, applying a rotation about x-axis for PI/3 (60 degrees) on the camera axes that
+	// the up axis is negative z-axis and the target axis is negative y-axis.
+	// Instead, directly applying a rotation about the original camera (facing -z with up +y)
+	// would be used. Without applying tilting, it should be -90 degrees about x-axis,
+	// then the camera faces -y with up -z; after applying tilting,
+	// it becomes -60 degrees about x-axis, with 30-degree rotation about x-axis on the former.
+	*CAMERA_DIR * translation(&pos)
 }
 
 /// Gameplay World Rendering (GWR) Program
