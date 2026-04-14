@@ -37,7 +37,7 @@ use crate::mui::{
 	MuiEvent,
 	SdlHandle,
 };
-use crate::phy::{OdePlaceableGeom, PhyEnv, PhyRawGeom, PhyRawGeomPlaceable, PhyWorld};
+use crate::phy::{OdeMass, OdePlaceableGeom, PhyBody, PhyEnv, PhyRawGeom, PhyRawGeomPlaceable, PhyWorld};
 use derive_more::From;
 use jni::objects::{JClass, JDoubleArray, JFloatArray, JIntArray, JObject, JString, ReleaseMode};
 use jni::sys::{jbyte, jdouble, jdoubleArray, jfloat, jfloatArray, jint, jintArray, jlong, jlongArray, jobjectArray, jsize, jstring};
@@ -1039,6 +1039,55 @@ jni_ferricia! {
 jni_ferricia! {
 	Physics.newPhyWorld(mut env: JNIEnv, class: JClass, handle: jlong) -> jlong {
 		jni_to_ptr(jni_ref_ptr::<PhyEnv>(handle).create_world())
+	}
+}
+
+jni_ferricia! {
+	Physics.tickPhyWorld(mut env: JNIEnv, class: JClass, handle: jlong) {
+		jni_ref_ptr::<PhyWorld>(handle).tick()
+	}
+}
+
+jni_ferricia! {
+	Physics.newMassSphereTotal(mut env: JNIEnv, class: JClass, mass_val: jdouble, radius: jdouble) -> jlong {
+		let mut mass = OdeMass::new();
+		mass.set_sphere_total(mass_val, radius);
+		jni_to_ptr(mass)
+	}
+}
+
+jni_ferricia! {
+	Physics.newPhyBody(mut env: JNIEnv, class: JClass, handle: jlong, mass_handle: jlong) -> jlong {
+		jni_to_ptr(jni_ref_ptr::<PhyWorld>(handle).new_body(jni_from_ptr(mass_handle)))
+	}
+}
+
+jni_ferricia! {
+	Physics.addPhyBodyGeom(mut env: JNIEnv, class: JClass, handle: jlong, geom_handle: jlong) {
+		jni_ref_ptr::<PhyBody>(handle).add_geom(jni_ref_ptr(geom_handle))
+	}
+}
+
+jni_ferricia! {
+	Physics.setPhyBodyPos(mut env: JNIEnv, class: JClass, handle: jlong, data: jdoubleArray) {
+		jni_get_arr!(arr = JDoubleArray; data, env);
+		unsafe { jni_ref_ptr::<PhyBody>(handle).set_position(arr[0], arr[1], arr[2]) }
+	}
+}
+
+jni_ferricia! {
+	Physics.setPhyBodyLinearVel(mut env: JNIEnv, class: JClass, handle: jlong, data: jdoubleArray) {
+		jni_get_arr!(arr = JDoubleArray; data, env);
+		unsafe { jni_ref_ptr::<PhyBody>(handle).set_linear_vel(arr[0], arr[1], arr[2]) }
+	}
+}
+
+jni_ferricia! {
+	Physics.getPhyBodyPos(mut env: JNIEnv, class: JClass, handle: jlong) -> jdoubleArray {
+		let r = unsafe { jni_ref_ptr::<PhyBody>(handle).get_position() };
+		let arr = env.new_double_array(3).expect("Cannot create Java double array");
+		env.set_double_array_region(&arr, 0, r).expect("Cannot set Java double array");
+		arr.into_raw()
 	}
 }
 

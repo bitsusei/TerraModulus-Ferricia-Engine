@@ -47,6 +47,10 @@ impl OdeWorld {
 		}
 	}
 
+	pub(crate) fn new_body(&self, mass: OdeMass) -> OdeBody {
+		OdeBody::new(self.id, mass)
+	}
+
 	pub fn set_gravity(&self, x: f64, y: f64, z: f64) {
 		unsafe { dWorldSetGravity(self.id, x, y, z); }
 	}
@@ -263,6 +267,12 @@ impl Drop for OdeBody {
 pub struct OdeMass {
 	/// Directly mutating values may cause invalid mass.
 	data: dMass,
+}
+
+impl Default for OdeMass {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl OdeMass {

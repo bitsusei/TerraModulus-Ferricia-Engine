@@ -10,7 +10,7 @@ use getset::Getters;
 use nalgebra_glm::DVec3;
 use ordermap::OrderSet;
 use crate::phy::ode::{OdeBody, OdeHandle, OdePlaceabilityMarker, OdeWorld};
-pub use crate::phy::ode::{OdeBox, OdeGeom, OdeGeomNonPlaceable, OdeGeomPlaceable, OdeNonPlaceableGeom, OdeNonPlaceableMarker, OdePlaceableGeom, OdePlaceableMarker, OdeSpace, OdeSphere};
+pub use crate::phy::ode::{OdeBox, OdeGeom, OdeGeomNonPlaceable, OdeGeomPlaceable, OdeMass, OdeNonPlaceableGeom, OdeNonPlaceableMarker, OdePlaceableGeom, OdePlaceableMarker, OdeSpace, OdeSphere};
 
 mod ode;
 
@@ -53,6 +53,10 @@ impl PhyWorld {
 			space: TopLevelSpace::new(),
 			objs: OrderSet::default(),
 		}
+	}
+	
+	pub fn new_body(&self, mass: OdeMass) -> PhyBody {
+		PhyBody::new_body(&self.data, mass)
 	}
 
 	pub fn tick(&self) {
@@ -122,8 +126,32 @@ pub struct PhyBody {
 }
 
 impl PhyBody {
-	pub fn new_body() -> Self {
-		todo!()
+	fn new_body(world: &OdeWorld, mass: OdeMass) -> Self {
+		Self {
+			data: Some(world.new_body(mass)),
+			geoms: OrderSet::default(),
+		}
+	}
+	
+	/// # Safety
+	/// 
+	/// Caller must make sure this object contains a valid [`OdeBody`].
+	pub unsafe fn set_position(&self, x: f64, y: f64, z: f64) {
+		self.data.as_ref().unwrap().set_position(x, y, z);
+	}
+
+	/// # Safety
+	///
+	/// Caller must make sure this object contains a valid [`OdeBody`].
+	pub unsafe fn get_position(&self) -> &[f64; 3] {
+		self.data.as_ref().unwrap().get_position()
+	}
+
+	/// # Safety
+	///
+	/// Caller must make sure this object contains a valid [`OdeBody`].
+	pub unsafe fn set_linear_vel(&self, x: f64, y: f64, z: f64) {
+		self.data.as_ref().unwrap().set_linear_vel(x, y, z);
 	}
 
 	pub fn add_geom(&mut self, geom: &PhyRawGeom<OdePlaceableMarker>) {
