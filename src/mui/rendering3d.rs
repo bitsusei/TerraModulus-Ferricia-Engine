@@ -361,7 +361,7 @@ impl SimpleMesh3dGeom {
 	}
 
 	pub(crate) fn new_sphere(radius: f32, color: Color) -> Self {
-		let mesh = Mesh::sphere(radius, 20, 10, None).translate(-radius, -radius, -radius);
+		let mesh = Mesh::sphere(radius, 20, 10, None);
 		Self::new_mesh_centered(mesh, color)
 	}
 }
