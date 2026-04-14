@@ -122,7 +122,7 @@ fn ortho_proj_mat(size: (u32, u32), scale: f32) -> Mat4 {
 	) * translation(&offset) * scaling(&scale)
 }
 
-fn look_view_mat(pos: Vec3) -> Mat4 {
+fn look_view_mat(mut pos: Vec3) -> Mat4 {
 	// Originally, look_at(&pos, &CAMERA_TARGET, &CAMERA_UP) was used, but the result is awkward.
 	// Where:
 	//   INCLINATION = Mat4::new_rotation(Vec3::new(PI / 3., 0., 0.));
@@ -134,6 +134,8 @@ fn look_view_mat(pos: Vec3) -> Mat4 {
 	// would be used. Without applying tilting, it should be -90 degrees about x-axis,
 	// then the camera faces -y with up -z; after applying tilting,
 	// it becomes -60 degrees about x-axis, with 30-degree rotation about x-axis on the former.
+	// Inversion of coordinates is done to cancel out the offsets of camera.
+	pos = -pos;
 	*CAMERA_DIR * translation(&pos)
 }
 
@@ -209,10 +211,9 @@ impl DrawableWorldObj {
 
 	/// Scaling matrix from `[-1, 1]` to a form; for example, times .5 to size of one meter.
 	/// Position must be based on values of the Center of Gravity (CoG).
-	pub fn update_model(&mut self, pos: Vec3, q: DQuat, scaling: Vec3) {
-		let m = quat_to_mat4(&q).cast(); // Rotation
-		let m = scale(&m, &scaling); // Scaling
-		self.model = translate(&m, &pos); // Translation from Origin to World Coordinates by CoG
+	pub fn update_model(&mut self, pos: Vec3, q: DQuat, scale: Vec3) {
+		// Translation from Origin to World Coordinates by CoG, after scaling and rotation
+		self.model = translation(&pos) * quat_to_mat4(&q).cast() * scaling(&scale);
 	}
 }
 
