@@ -54,7 +54,7 @@ impl PhyWorld {
 			objs: OrderSet::default(),
 		}
 	}
-	
+
 	pub fn new_body(&self, mass: OdeMass) -> PhyBody {
 		PhyBody::new_body(&self.data, mass)
 	}
@@ -132,9 +132,9 @@ impl PhyBody {
 			geoms: OrderSet::default(),
 		}
 	}
-	
+
 	/// # Safety
-	/// 
+	///
 	/// Caller must make sure this object contains a valid [`OdeBody`].
 	pub unsafe fn set_position(&self, x: f64, y: f64, z: f64) {
 		self.data.as_ref().unwrap().set_position(x, y, z);

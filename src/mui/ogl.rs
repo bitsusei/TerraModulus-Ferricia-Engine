@@ -34,7 +34,7 @@
 
 use getset::Getters;
 use gl::types::{GLenum, GLubyte, GLuint};
-use gl::{ActiveTexture, AttachShader, BindBuffer, BindTexture, BindVertexArray, BlendFunc, BufferData, BufferSubData, Clear, ClearColor, CompileShader, CreateProgram, CreateShader, DeleteShader, DisableVertexAttribArray, DrawArrays, DrawElements, Enable, EnableVertexAttribArray, GenBuffers, GenVertexArrays, GetIntegerv, GetShaderInfoLog, GetShaderiv, GetString, GetStringi, GetUniformLocation, LinkProgram, ShaderSource, UniformMatrix4fv, UseProgram, VertexAttrib1d, VertexAttrib1f, VertexAttrib1s, VertexAttrib2d, VertexAttrib2f, VertexAttrib2s, VertexAttrib3d, VertexAttrib3f, VertexAttrib3s, VertexAttrib4Nub, VertexAttrib4d, VertexAttrib4f, VertexAttrib4s, VertexAttribI1i, VertexAttribI1ui, VertexAttribI2i, VertexAttribI2ui, VertexAttribI3i, VertexAttribI3ui, VertexAttribI4i, VertexAttribI4ui, VertexAttribPointer, Viewport, ARRAY_BUFFER, BLEND, BYTE, COLOR_BUFFER_BIT, COMPILE_STATUS, COMPUTE_SHADER, DOUBLE, EXTENSIONS, FALSE, FLOAT, FRAGMENT_SHADER, GEOMETRY_SHADER, INT, NUM_EXTENSIONS, ONE_MINUS_SRC_ALPHA, RENDERER, SHADING_LANGUAGE_VERSION, SHORT, SRC_ALPHA, TESS_CONTROL_SHADER, TESS_EVALUATION_SHADER, TEXTURE0, TEXTURE_2D, UNSIGNED_BYTE, UNSIGNED_INT, UNSIGNED_SHORT, VENDOR, VERSION, VERTEX_SHADER};
+use gl::{ActiveTexture, AttachShader, BindBuffer, BindTexture, BindVertexArray, BlendFunc, BufferData, BufferSubData, Clear, ClearColor, CompileShader, CreateProgram, CreateShader, DeleteShader, DisableVertexAttribArray, DrawArrays, DrawElements, Enable, EnableVertexAttribArray, GenBuffers, GenVertexArrays, GetIntegerv, GetShaderInfoLog, GetShaderiv, GetString, GetStringi, GetUniformLocation, LinkProgram, ShaderSource, Uniform3fv, UniformMatrix4fv, UseProgram, VertexAttrib1d, VertexAttrib1f, VertexAttrib1s, VertexAttrib2d, VertexAttrib2f, VertexAttrib2s, VertexAttrib3d, VertexAttrib3f, VertexAttrib3s, VertexAttrib4Nub, VertexAttrib4d, VertexAttrib4f, VertexAttrib4s, VertexAttribI1i, VertexAttribI1ui, VertexAttribI2i, VertexAttribI2ui, VertexAttribI3i, VertexAttribI3ui, VertexAttribI4i, VertexAttribI4ui, VertexAttribPointer, Viewport, ARRAY_BUFFER, BLEND, BYTE, COLOR_BUFFER_BIT, COMPILE_STATUS, COMPUTE_SHADER, DOUBLE, EXTENSIONS, FALSE, FLOAT, FRAGMENT_SHADER, GEOMETRY_SHADER, INT, NUM_EXTENSIONS, ONE_MINUS_SRC_ALPHA, RENDERER, SHADING_LANGUAGE_VERSION, SHORT, SRC_ALPHA, TESS_CONTROL_SHADER, TESS_EVALUATION_SHADER, TEXTURE0, TEXTURE_2D, UNSIGNED_BYTE, UNSIGNED_INT, UNSIGNED_SHORT, VENDOR, VERSION, VERTEX_SHADER};
 use num_traits::{Bounded, Num};
 use regex::Regex;
 use sdl3::video::GLContext;
@@ -46,7 +46,7 @@ use std::mem::MaybeUninit;
 use std::ptr::{null, null_mut};
 use std::sync::LazyLock;
 use icu::datetime::fieldsets::T;
-use nalgebra_glm::TMat4;
+use nalgebra_glm::{TMat4, Vec3};
 use sdl3::pixels::Color;
 use crate::util::{str_from_c, str_to_c};
 
@@ -452,6 +452,10 @@ pub(super) fn use_vao(vao: u32) {
 
 pub(super) fn use_uniform_mat_4(i: u32, mat: &TMat4<f32>) {
 	unsafe { UniformMatrix4fv(i as _, 1, FALSE, mat.as_ptr()); }
+}
+
+pub(super) fn use_uniform_vec_3(i: u32, vec: &Vec3) {
+	unsafe { Uniform3fv(i as _, 1, vec.as_ptr()); }
 }
 
 pub(super) fn draw_arrays(mode: GLenum, count: u32) {

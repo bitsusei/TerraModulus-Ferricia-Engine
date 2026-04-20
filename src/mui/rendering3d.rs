@@ -37,7 +37,7 @@
 //! including "2.5D" objects (most likely particles) where the 2D textures always face to the camera.
 //!
 //! [Canvas]: super::rendering::CanvasHandle
-use crate::mui::ogl::{buf_obj_with_data, draw_arrays, draw_elements, gen_buf_obj, gen_buf_objs, get_uniform_location, new_shader_program, update_buf_obj, use_program, use_uniform_mat_4, vert_attr, vert_attr_arr, with_new_vert_arr, NumType, ShaderType, VertexAttrVariant};
+use crate::mui::ogl::{buf_obj_with_data, draw_arrays, draw_elements, gen_buf_obj, gen_buf_objs, get_uniform_location, new_shader_program, update_buf_obj, use_program, use_uniform_mat_4, use_uniform_vec_3, vert_attr, vert_attr_arr, with_new_vert_arr, NumType, ShaderType, VertexAttrVariant};
 use crate::mui::rendering::{compile_shader_from, Geom, RenderPrimitive};
 use crate::FerriciaResult;
 use array_macro::array;
@@ -54,6 +54,8 @@ static IDENT_MAT_4: LazyLock<Mat4> = LazyLock::new(identity);
 /// parameters the opposite sign. This literally means 60 degrees, but when computed,
 /// it is the result as if the value of -60 degrees is inputted.
 static CAMERA_DIR: LazyLock<Mat4> = LazyLock::new(|| Mat4::new_rotation(Vec3::new(PI / 3., 0., 0.)));
+/// The direction of light pointing South with 45 degrees of depression.
+static LIGHT_DIR: LazyLock<Vec3> = LazyLock::new(|| Vec3::new(0., -1., 1.).normalize());
 static STANDARD_SCALING: f32 = 64.;
 
 pub(crate) struct Camera3d {
@@ -154,6 +156,7 @@ pub(crate) struct GwrGeoProgram {
 	view_pos: u32,
 	projection_pos: u32,
 	filter_pos: u32,
+	light_dir_pos: u32,
 }
 
 impl GwrGeoProgram {
@@ -167,6 +170,7 @@ impl GwrGeoProgram {
 			view_pos: get_uniform_location(id, "view"),
 			projection_pos: get_uniform_location(id, "projection"),
 			filter_pos: get_uniform_location(id, "filter"),
+			light_dir_pos: get_uniform_location(id, "lightDir"),
 			id,
 		})
 	}
@@ -187,6 +191,7 @@ impl GwrProgram for GwrGeoProgram {
 		use_uniform_mat_4(self.view_pos, view);
 		use_uniform_mat_4(self.model_pos, &obj.model);
 		use_uniform_mat_4(self.filter_pos, &IDENT_MAT_4);
+		use_uniform_vec_3(self.light_dir_pos, &LIGHT_DIR);
 	}
 }
 
@@ -248,7 +253,8 @@ impl RenderPrimitive for SimpleLine3dGeom {
 	}
 
 	fn draw(&self) {
-		vert_attr(1, VertexAttrVariant::UbyteNorm4.call(self.color.rgba())); // Color
+		vert_attr(1, VertexAttrVariant::Float3(0., 0., 0.));
+		vert_attr(2, VertexAttrVariant::UbyteNorm4.call(self.color.rgba())); // Color
 		draw_arrays(LINES, Self::NUM_VERTICES);
 	}
 
@@ -296,7 +302,8 @@ impl RenderPrimitive for SimpleQuad3dGeom {
 	}
 
 	fn draw(&self) {
-		vert_attr(1, VertexAttrVariant::UbyteNorm4.call(self.color.rgba())); // Color
+		vert_attr(1, VertexAttrVariant::Float3(0., 0., 0.));
+		vert_attr(2, VertexAttrVariant::UbyteNorm4.call(self.color.rgba())); // Color
 		draw_elements(TRIANGLES, Self::NUM_ELEMENTS);
 	}
 
@@ -353,12 +360,33 @@ impl SimpleMesh3dGeom {
 	fn new_mesh_centered(mesh: Mesh<()>, color: Color) -> Self {
 		let vao = with_new_vert_arr();
 		let [vbo, ebo] = gen_buf_objs();
-		let tri_mesh = mesh.to_trimesh().unwrap();
-		let vertices = tri_mesh.vertices().iter().flat_map(|p| p.iter()).cloned().collect::<Vec<_>>();
+		// Refers to Mesh::get_vertices_and_indices
+		let tri_csg = mesh.triangulate();
+		let vertices = tri_csg
+			.polygons
+			.iter()
+			.flat_map(|p| [
+				p.vertices[0].pos.iter(),
+				p.vertices[0].normal.iter(),
+				p.vertices[1].pos.iter(),
+				p.vertices[1].normal.iter(),
+				p.vertices[2].pos.iter(),
+				p.vertices[2].normal.iter(),
+			])
+			.flatten()
+			.cloned()
+			.collect::<Vec<_>>();
+		let indices = (0..tri_csg.polygons.len())
+			.flat_map(|i| {
+				let offset = i as u32 * 3;
+				[offset, offset + 1, offset + 2]
+			})
+			.collect::<Vec<_>>();
 		buf_obj_with_data(ARRAY_BUFFER, vbo, vertices.as_slice(), DYNAMIC_DRAW);
-		buf_obj_with_data(ELEMENT_ARRAY_BUFFER, ebo, tri_mesh.indices().as_flattened(), STATIC_DRAW);
-		vert_attr_arr(0, 3, NumType::Float, 3, 0);
-		Self { vao, vbo, ebo, num_vertices: tri_mesh.vertices().len() as u32, mesh, color }
+		buf_obj_with_data(ELEMENT_ARRAY_BUFFER, ebo, indices.as_slice(), STATIC_DRAW);
+		vert_attr_arr(0, 3, NumType::Float, 6, 0);
+		vert_attr_arr(1, 3, NumType::Float, 6, 3);
+		Self { vao, vbo, ebo, num_vertices: (vertices.len() / 2) as u32, mesh, color }
 	}
 
 	pub(crate) fn new_sphere(radius: f32, color: Color) -> Self {
@@ -373,7 +401,7 @@ impl RenderPrimitive for SimpleMesh3dGeom {
 	}
 
 	fn draw(&self) {
-		vert_attr(1, VertexAttrVariant::UbyteNorm4.call(self.color.rgba())); // Color
+		vert_attr(2, VertexAttrVariant::UbyteNorm4.call(self.color.rgba())); // Color
 		draw_elements(TRIANGLES, self.num_vertices);
 	}
 
