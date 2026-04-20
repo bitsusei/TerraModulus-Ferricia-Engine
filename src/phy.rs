@@ -9,7 +9,7 @@ use by_address::ByAddress;
 use getset::Getters;
 use nalgebra_glm::DVec3;
 use ordermap::OrderSet;
-use crate::phy::ode::{OdeBody, OdeHandle, OdePlaceabilityMarker, OdeWorld};
+use crate::phy::ode::{OdeBody, OdeContactManager, OdeHandle, OdePlaceabilityMarker, OdeWorld};
 pub use crate::phy::ode::{OdeBox, OdeGeom, OdeGeomNonPlaceable, OdeGeomPlaceable, OdeMass, OdeNonPlaceableGeom, OdeNonPlaceableMarker, OdePlaceableGeom, OdePlaceableMarker, OdeSpace, OdeSphere};
 
 mod ode;
@@ -38,6 +38,28 @@ impl PhyEnv {
 	}
 }
 
+pub struct PhyCollisionManager {
+	contact_manager: OdeContactManager,
+}
+
+impl Default for PhyCollisionManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl PhyCollisionManager {
+	pub fn new() -> Self {
+		Self {
+			contact_manager: OdeContactManager::new(),
+		}
+	}
+
+	pub fn process(&mut self, world: &PhyWorld) {
+		self.contact_manager.process(&world.data)
+	}
+}
+
 #[derive(Getters)]
 pub struct PhyWorld {
 	data: OdeWorld,
@@ -59,8 +81,9 @@ impl PhyWorld {
 		PhyBody::new_body(&self.data, mass)
 	}
 
-	pub fn tick(&self) {
-		self.data.step(1.0 / TICK_FREQUENCY)
+	pub fn tick(&self, collision_manager: &mut PhyCollisionManager) {
+		self.data.step(1.0 / TICK_FREQUENCY);
+		self.collide(collision_manager);
 	}
 }
 
@@ -82,6 +105,10 @@ impl TopLevelSpace {
 
 	pub fn create_box(&self, lengths: DVec3) -> OdeBox {
 		OdeBox::new(Some(&self.data), lengths)
+	}
+
+	pub fn collide(&self, collision_manager: &mut PhyCollisionManager) {
+		self.data.collide(&mut collision_manager.contact_manager)
 	}
 }
 

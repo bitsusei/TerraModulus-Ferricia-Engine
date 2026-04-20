@@ -37,7 +37,7 @@ use crate::mui::{
 	MuiEvent,
 	SdlHandle,
 };
-use crate::phy::{OdeMass, OdePlaceableGeom, PhyBody, PhyEnv, PhyRawGeom, PhyRawGeomPlaceable, PhyWorld};
+use crate::phy::{OdeMass, OdePlaceableGeom, PhyBody, PhyCollisionManager, PhyEnv, PhyRawGeom, PhyRawGeomPlaceable, PhyWorld};
 use derive_more::From;
 use jni::objects::{JClass, JDoubleArray, JFloatArray, JIntArray, JObject, JString, ReleaseMode};
 use jni::sys::{jbyte, jdouble, jdoubleArray, jfloat, jfloatArray, jint, jintArray, jlong, jlongArray, jobjectArray, jsize, jstring};
@@ -1037,14 +1037,26 @@ jni_ferricia! {
 }
 
 jni_ferricia! {
+	Physics.newPhyCollisionManager(mut env: JNIEnv, class: JClass) -> jlong {
+		jni_to_ptr(PhyCollisionManager::new())
+	}
+}
+
+jni_ferricia! {
+	Physics.processPhyCollisionManager(mut env: JNIEnv, class: JClass, handle: jlong, world_handle: jlong) {
+		jni_ref_ptr::<PhyCollisionManager>(handle).process(jni_ref_ptr::<PhyWorld>(handle))
+	}
+}
+
+jni_ferricia! {
 	Physics.newPhyWorld(mut env: JNIEnv, class: JClass, handle: jlong) -> jlong {
 		jni_to_ptr(jni_ref_ptr::<PhyEnv>(handle).create_world())
 	}
 }
 
 jni_ferricia! {
-	Physics.tickPhyWorld(mut env: JNIEnv, class: JClass, handle: jlong) {
-		jni_ref_ptr::<PhyWorld>(handle).tick()
+	Physics.tickPhyWorld(mut env: JNIEnv, class: JClass, handle: jlong, cm_handle: jlong) {
+		jni_ref_ptr::<PhyWorld>(handle).tick(jni_ref_ptr::<PhyCollisionManager>(handle))
 	}
 }
 

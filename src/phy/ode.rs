@@ -5,11 +5,13 @@
 use crate::util::{concat_arrays, create_file_c, str_from_c};
 use getset::{Getters, MutGetters};
 use nalgebra_glm::{DMat3, DMat4, DMat4x3, DQuat, DVec3, DVec4};
-use ode_sys::{dBodyAddForce, dBodyAddForceAtPos, dBodyAddForceAtRelPos, dBodyAddRelForce, dBodyAddRelForceAtPos, dBodyAddRelForceAtRelPos, dBodyAddTorque, dBodyCreate, dBodyDestroy, dBodyDisable, dBodyEnable, dBodyGetAngularVel, dBodyGetGravityMode, dBodyGetLinearVel, dBodyGetPosition, dBodyGetQuaternion, dBodyGetRotation, dBodyID, dBodyIsEnabled, dBodyIsKinematic, dBodySetAngularVel, dBodySetDynamic, dBodySetGravityMode, dBodySetKinematic, dBodySetLinearVel, dBodySetMass, dBodySetMovedCallback, dBodySetPosition, dBodySetQuaternion, dBodySetRotation, dCloseODE, dCreateBox, dCreateCapsule, dCreateCylinder, dCreatePlane, dCreateRay, dCreateSphere, dGeomBoxSetLengths, dGeomCapsuleSetParams, dGeomClearOffset, dGeomCylinderSetParams, dGeomDestroy, dGeomDisable, dGeomEnable, dGeomGetAABB, dGeomGetOffsetPosition, dGeomGetOffsetQuaternion, dGeomGetOffsetRotation, dGeomGetPosition, dGeomGetQuaternion, dGeomGetRotation, dGeomID, dGeomIsEnabled, dGeomIsSpace, dGeomPlaneSetParams, dGeomRaySet, dGeomRaySetBackfaceCull, dGeomRaySetClosestHit, dGeomRaySetFirstContact, dGeomRaySetLength, dGeomRaySetParams, dGeomSetBody, dGeomSetOffsetPosition, dGeomSetOffsetQuaternion, dGeomSetOffsetRotation, dGeomSetOffsetWorldPosition, dGeomSetOffsetWorldQuaternion, dGeomSetOffsetWorldRotation, dGeomSetPosition, dGeomSetQuaternion, dGeomSetRotation, dGeomSphereSetRadius, dGetConfiguration, dHashSpaceCreate, dHashSpaceSetLevels, dInitODE, dMass, dMassAdd, dMassAdjust, dMassRotate, dMassSetBox, dMassSetBoxTotal, dMassSetCapsule, dMassSetCapsuleTotal, dMassSetCylinder, dMassSetCylinderTotal, dMassSetParameters, dMassSetSphere, dMassSetSphereTotal, dMassSetTrimesh, dMassSetTrimeshTotal, dMassSetZero, dMassTranslate, dNormalize3, dQuadTreeSpaceCreate, dSimpleSpaceCreate, dSpaceAdd, dSpaceCollide, dSpaceCollide2, dSpaceDestroy, dSpaceGetNumGeoms, dSpaceID, dSpaceQuery, dSpaceRemove, dSweepAndPruneSpaceCreate, dWorldCreate, dWorldDestroy, dWorldExportDIF, dWorldGetAutoDisableFlag, dWorldGetCFM, dWorldGetERP, dWorldGetGravity, dWorldID, dWorldImpulseToForce, dWorldSetAutoDisableFlag, dWorldSetCFM, dWorldSetERP, dWorldSetGravity, dWorldStep};
+use ode_sys::{dBodyAddForce, dBodyAddForceAtPos, dBodyAddForceAtRelPos, dBodyAddRelForce, dBodyAddRelForceAtPos, dBodyAddRelForceAtRelPos, dBodyAddTorque, dBodyCreate, dBodyDestroy, dBodyDisable, dBodyEnable, dBodyGetAngularVel, dBodyGetForce, dBodyGetGravityMode, dBodyGetLinearVel, dBodyGetPosition, dBodyGetQuaternion, dBodyGetRotation, dBodyID, dBodyIsEnabled, dBodyIsKinematic, dBodySetAngularVel, dBodySetDynamic, dBodySetGravityMode, dBodySetKinematic, dBodySetLinearVel, dBodySetMass, dBodySetMovedCallback, dBodySetPosition, dBodySetQuaternion, dBodySetRotation, dCloseODE, dCollide, dContact, dContactGeom, dCreateBox, dCreateCapsule, dCreateCylinder, dCreatePlane, dCreateRay, dCreateSphere, dGeomBoxSetLengths, dGeomCapsuleSetParams, dGeomClearOffset, dGeomCylinderSetParams, dGeomDestroy, dGeomDisable, dGeomEnable, dGeomGetAABB, dGeomGetBody, dGeomGetOffsetPosition, dGeomGetOffsetQuaternion, dGeomGetOffsetRotation, dGeomGetPosition, dGeomGetQuaternion, dGeomGetRotation, dGeomID, dGeomIsEnabled, dGeomIsSpace, dGeomPlaneSetParams, dGeomRaySet, dGeomRaySetBackfaceCull, dGeomRaySetClosestHit, dGeomRaySetFirstContact, dGeomRaySetLength, dGeomRaySetParams, dGeomSetBody, dGeomSetOffsetPosition, dGeomSetOffsetQuaternion, dGeomSetOffsetRotation, dGeomSetOffsetWorldPosition, dGeomSetOffsetWorldQuaternion, dGeomSetOffsetWorldRotation, dGeomSetPosition, dGeomSetQuaternion, dGeomSetRotation, dGeomSphereSetRadius, dGetConfiguration, dHashSpaceCreate, dHashSpaceSetLevels, dInitODE, dJointCreateContact, dJointDestroy, dJointGroupCreate, dJointGroupDestroy, dJointGroupID, dJointID, dMass, dMassAdd, dMassAdjust, dMassRotate, dMassSetBox, dMassSetBoxTotal, dMassSetCapsule, dMassSetCapsuleTotal, dMassSetCylinder, dMassSetCylinderTotal, dMassSetParameters, dMassSetSphere, dMassSetSphereTotal, dMassSetTrimesh, dMassSetTrimeshTotal, dMassSetZero, dMassTranslate, dNormalize3, dQuadTreeSpaceCreate, dSimpleSpaceCreate, dSpaceAdd, dSpaceCollide, dSpaceCollide2, dSpaceDestroy, dSpaceGetNumGeoms, dSpaceID, dSpaceQuery, dSpaceRemove, dSurfaceParameters, dSweepAndPruneSpaceCreate, dWorldCreate, dWorldDestroy, dWorldExportDIF, dWorldGetAutoDisableFlag, dWorldGetCFM, dWorldGetERP, dWorldGetGravity, dWorldID, dWorldImpulseToForce, dWorldSetAutoDisableFlag, dWorldSetCFM, dWorldSetERP, dWorldSetGravity, dWorldStep};
 use std::ffi::{c_void, CString};
 use std::marker::PhantomData;
 use std::mem::{transmute, MaybeUninit};
-use std::ptr::null_mut;
+use std::ptr::{null, null_mut};
+use futures::StreamExt;
+use crate::phy::{PhyCollisionManager, PhyWorld};
 
 pub(super) struct OdeHandle {
 	_private: PhantomData<()>,
@@ -107,6 +109,11 @@ impl OdeWorld {
 	/// `mass` must not be moved afterwards.
 	pub fn create_body(&self, mass: OdeMass) -> OdeBody {
 		OdeBody::new(self.id, mass)
+	}
+
+	pub fn new_joint_contact(&self, contact: OdeContact) -> OdeJoint {
+		let contact = contact.into_inner();
+		unsafe { OdeJoint::new(dJointCreateContact(self.id, null_mut(), &raw const contact)) }
 	}
 
 	/// `path` must be a path of a file to be created.
@@ -780,6 +787,8 @@ impl OdeGeom for OdeSpace {
 	}
 }
 
+const MAX_CONTACTS: u32 = 256;
+
 // Source: https://ode.org/wiki/index.php/Manual
 unsafe extern "C" fn near_callback(data: *mut c_void, o1: dGeomID, o2: dGeomID) {
 	unsafe {
@@ -794,19 +803,52 @@ unsafe extern "C" fn near_callback(data: *mut c_void, o1: dGeomID, o2: dGeomID) 
 		} else {
 			// colliding two non-space geoms, so generate contact
 			// points between o1 and o2
-			//int num_contact = dCollide (o1, o2, max_contacts,contact_array, skip);
+			let mut contact_array: [MaybeUninit<_>; 1000] = [const { MaybeUninit::uninit() }; 1000];
+			let num_contact = dCollide(o1, o2, MAX_CONTACTS as _, contact_array[0].as_mut_ptr(), size_of::<dContactGeom>() as _);
 			// add these contact points to the simulation ...
+			let contact_manager = &mut *(data as *mut OdeContactManager);
+			contact_array[0..(num_contact as _)]
+				.iter_mut()
+				.map(|e| e.assume_init_read())
+				.filter(|e| {
+					let g1 = {
+						let g = dGeomGetBody(e.g1);
+						if g.is_null() { None } else { Some(g) }
+					};
+					let g2 = {
+						let g = dGeomGetBody(e.g2);
+						if g.is_null() { None } else { Some(g) }
+					};
+					if g1.is_none() && g2.is_none() { return false }
+					fn is_moving(body: dBodyID) -> bool {
+						fn is_zero(vec: *const f64) -> bool {
+							unsafe { *vec == 0.0 && *vec.add(1) == 0.0 && *vec.add(2) == 0.0 }
+						}
+						unsafe {
+							is_zero(dBodyGetLinearVel(body)) && is_zero(dBodyGetForce(body))
+						}
+					}
+					if let Some(b) = g1 {
+						if is_moving(b) { return true }
+					}
+					if let Some(b) = g2 {
+						if is_moving(b) { return true }
+					}
+					false
+				})
+				.for_each(|g| contact_manager.buf.push(g));
 		}
 	}
 }
 
+#[allow(clippy::identity_op)]
 pub enum OdeSapAxisOrder {
-	XYZ = (0)|(1<<2)|(2<<4),
-	XZY = (0)|(2<<2)|(1<<4),
-	YXZ = (1)|(0<<2)|(2<<4),
-	YZX = (1)|(2<<2)|(0<<4),
-	ZXY = (2)|(0<<2)|(1<<4),
-	ZYX = (2)|(1<<2)|(0<<4),
+	Xyz = (0)|(1<<2)|(2<<4),
+	Xzy = (0)|(2<<2)|(1<<4),
+	Yxz = (1)|(0<<2)|(2<<4),
+	Yzx = (1)|(2<<2)|(0<<4),
+	Zxy = (2)|(0<<2)|(1<<4),
+	Zyx = (2)|(1<<2)|(0<<4),
 }
 
 trait IntoSpaceId {
@@ -845,8 +887,8 @@ impl OdeSpace {
 		geom_get_aabb(self)
 	}
 
-	pub fn collide(&self) {
-		unsafe { dSpaceCollide(self.id, null_mut(), Some(near_callback)) }
+	pub fn collide(&self, contact_manager: &mut OdeContactManager) {
+		unsafe { dSpaceCollide(self.id, contact_manager as *mut _ as _, Some(near_callback)) }
 	}
 
 	pub fn add(&self, geom: &impl OdeGeom) {
@@ -863,6 +905,61 @@ impl OdeSpace {
 
 	pub fn get_nums_geom(&self) -> i32 {
 		unsafe { dSpaceGetNumGeoms(self.id) }
+	}
+}
+
+pub struct OdeContactManager {
+	buf: Vec<dContactGeom>,
+}
+
+impl OdeContactManager {
+	pub fn new() -> Self {
+		Self { buf: Vec::new() }
+	}
+
+	pub fn process(&mut self, world: &OdeWorld) {
+		for geom in self.buf.drain(..) {
+			world.new_joint_contact(OdeContact::new(geom));
+		}
+	}
+}
+
+pub struct OdeContact {
+	geom: dContactGeom,
+}
+
+impl OdeContact {
+	fn new(geom: dContactGeom) -> Self {
+		Self { geom }
+	}
+
+	fn into_inner(self) -> dContact {
+		// TODO fill in other fields
+		let mut surface = MaybeUninit::<dSurfaceParameters>::uninit();
+		unsafe { (&raw mut (*surface.as_mut_ptr()).mu).write(f64::INFINITY); }
+		let surface = unsafe { surface.assume_init() };
+		#[allow(clippy::uninit_assumed_init, invalid_value)]
+		dContact {
+			surface,
+			geom: self.geom,
+			fdir1: unsafe { MaybeUninit::uninit().assume_init() },
+		}
+	}
+}
+
+pub struct OdeJoint {
+	id: dJointID,
+}
+
+impl OdeJoint {
+	fn new(id: dJointID) -> Self {
+		Self { id }
+	}
+}
+
+impl Drop for OdeJoint {
+	fn drop(&mut self) {
+		unsafe { dJointDestroy(self.id); }
 	}
 }
 
