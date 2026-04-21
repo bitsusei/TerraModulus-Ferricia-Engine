@@ -803,39 +803,32 @@ unsafe extern "C" fn near_callback(data: *mut c_void, o1: dGeomID, o2: dGeomID) 
 		} else {
 			// colliding two non-space geoms, so generate contact
 			// points between o1 and o2
-			let mut contact_array: [MaybeUninit<_>; 1000] = [const { MaybeUninit::uninit() }; 1000];
+			let g1 = {
+				let g = dGeomGetBody(o1);
+				if g.is_null() { None } else { Some(g) }
+			};
+			let g2 = {
+				let g = dGeomGetBody(o2);
+				if g.is_null() { None } else { Some(g) }
+			};
+			if g1.is_none() && g2.is_none() { return }
+			fn is_moving(body: dBodyID) -> bool {
+				fn is_zero(vec: *const f64) -> bool {
+					unsafe { *vec == 0.0 && *vec.add(1) == 0.0 && *vec.add(2) == 0.0 }
+				}
+				unsafe {
+					is_zero(dBodyGetLinearVel(body)) && is_zero(dBodyGetForce(body))
+				}
+			}
+			if (g1.is_none() || g1.is_some() && !is_moving(g1.unwrap())) &&
+				(g2.is_none() || g2.is_some() && !is_moving(g2.unwrap())) { return }
+			let mut contact_array = [const { MaybeUninit::uninit() }; MAX_CONTACTS as _];
 			let num_contact = dCollide(o1, o2, MAX_CONTACTS as _, contact_array[0].as_mut_ptr(), size_of::<dContactGeom>() as _);
 			// add these contact points to the simulation ...
 			let contact_manager = &mut *(data as *mut OdeContactManager);
 			contact_array[0..(num_contact as _)]
 				.iter_mut()
 				.map(|e| e.assume_init_read())
-				.filter(|e| {
-					let g1 = {
-						let g = dGeomGetBody(e.g1);
-						if g.is_null() { None } else { Some(g) }
-					};
-					let g2 = {
-						let g = dGeomGetBody(e.g2);
-						if g.is_null() { None } else { Some(g) }
-					};
-					if g1.is_none() && g2.is_none() { return false }
-					fn is_moving(body: dBodyID) -> bool {
-						fn is_zero(vec: *const f64) -> bool {
-							unsafe { *vec == 0.0 && *vec.add(1) == 0.0 && *vec.add(2) == 0.0 }
-						}
-						unsafe {
-							is_zero(dBodyGetLinearVel(body)) && is_zero(dBodyGetForce(body))
-						}
-					}
-					if let Some(b) = g1 {
-						if is_moving(b) { return true }
-					}
-					if let Some(b) = g2 {
-						if is_moving(b) { return true }
-					}
-					false
-				})
 				.for_each(|g| contact_manager.buf.push(g));
 		}
 	}
@@ -912,12 +905,18 @@ pub struct OdeContactManager {
 	buf: Vec<dContactGeom>,
 }
 
+impl Default for OdeContactManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl OdeContactManager {
 	pub fn new() -> Self {
 		Self { buf: Vec::new() }
 	}
 
-	pub fn process(&mut self, world: &OdeWorld) {
+	pub(super) fn process(&mut self, world: &OdeWorld) {
 		for geom in self.buf.drain(..) {
 			world.new_joint_contact(OdeContact::new(geom));
 		}

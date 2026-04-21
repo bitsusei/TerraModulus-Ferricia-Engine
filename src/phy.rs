@@ -7,9 +7,9 @@ use std::ops::Deref;
 use std::rc::Rc;
 use by_address::ByAddress;
 use getset::Getters;
-use nalgebra_glm::DVec3;
+use nalgebra_glm::{DVec3, DVec4};
 use ordermap::OrderSet;
-use crate::phy::ode::{OdeBody, OdeContactManager, OdeHandle, OdePlaceabilityMarker, OdeWorld};
+use crate::phy::ode::{OdeBody, OdeContactManager, OdeHandle, OdePlaceabilityMarker, OdePlane, OdeWorld};
 pub use crate::phy::ode::{OdeBox, OdeGeom, OdeGeomNonPlaceable, OdeGeomPlaceable, OdeMass, OdeNonPlaceableGeom, OdeNonPlaceableMarker, OdePlaceableGeom, OdePlaceableMarker, OdeSpace, OdeSphere};
 
 mod ode;
@@ -105,6 +105,10 @@ impl TopLevelSpace {
 
 	pub fn create_box(&self, lengths: DVec3) -> OdeBox {
 		OdeBox::new(Some(&self.data), lengths)
+	}
+
+	pub fn create_plane(&self, params: DVec4) -> OdePlane {
+		OdePlane::new(Some(&self.data), params)
 	}
 
 	pub fn collide(&self, collision_manager: &mut PhyCollisionManager) {

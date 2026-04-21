@@ -42,7 +42,7 @@ use derive_more::From;
 use jni::objects::{JClass, JDoubleArray, JFloatArray, JIntArray, JObject, JString, ReleaseMode};
 use jni::sys::{jbyte, jdouble, jdoubleArray, jfloat, jfloatArray, jint, jintArray, jlong, jlongArray, jobjectArray, jsize, jstring};
 use jni::JNIEnv;
-use nalgebra_glm::{DQuat, DVec3, Vec3};
+use nalgebra_glm::{DQuat, DVec3, DVec4, Vec3};
 use paste::paste;
 use sdl3::pixels::Color;
 use std::backtrace::Backtrace;
@@ -1107,7 +1107,7 @@ jni_ferricia! {
 	Physics.newWorldPhyGeomBox(mut env: JNIEnv, class: JClass, handle: jlong, lengths: jdoubleArray) -> jlong {
 		jni_get_arr!(arr = JDoubleArray; lengths, env);
 		jni_to_ptr(PhyRawGeom::new(
-			jni_ref_ptr::<PhyWorld>(handle).space().create_box(DVec3::new(arr[0] as _, arr[1] as _, arr[2] as _))
+			jni_ref_ptr::<PhyWorld>(handle).space().create_box(DVec3::new(arr[0], arr[1], arr[2]))
 		))
 	}
 }
@@ -1121,9 +1121,18 @@ jni_ferricia! {
 }
 
 jni_ferricia! {
+	Physics.newWorldPhyGeomPlane(mut env: JNIEnv, class: JClass, handle: jlong, data: jdoubleArray) -> jlong {
+		jni_get_arr!(arr = JDoubleArray; data, env);
+		jni_to_ptr(PhyRawGeom::new(
+			jni_ref_ptr::<PhyWorld>(handle).space().create_plane(DVec4::new(arr[0], arr[1], arr[2], arr[3]))
+		))
+	}
+}
+
+jni_ferricia! {
 	Physics.setPhyRawGeomPlaceablePosition(mut env: JNIEnv, class: JClass, handle: jlong, pos: jdoubleArray) {
 		jni_get_arr!(arr = JDoubleArray; pos, env);
-		jni_ref_ptr::<PhyRawGeomPlaceable>(handle).set_position(arr[0] as _, arr[1] as _, arr[2] as _);
+		jni_ref_ptr::<PhyRawGeomPlaceable>(handle).set_position(arr[0], arr[1], arr[2]);
 	}
 }
 
