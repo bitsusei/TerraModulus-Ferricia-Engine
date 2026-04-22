@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: LGPL-3.0-only
  */
 use std::collections::LinkedList;
-use std::ops::Deref;
+use std::ops::{Deref, Range, RangeInclusive};
 use std::rc::Rc;
 use by_address::ByAddress;
 use getset::Getters;
@@ -58,6 +58,10 @@ impl PhyCollisionManager {
 	pub fn process(&mut self, world: &PhyWorld) {
 		self.contact_manager.process(&world.data)
 	}
+	
+	pub fn omit_space(&mut self, space: &OdeSpace) {
+		self.contact_manager.omit_space(space);
+	}
 }
 
 #[derive(Getters)]
@@ -109,6 +113,11 @@ impl TopLevelSpace {
 
 	pub fn create_plane(&self, params: DVec4) -> OdePlane {
 		OdePlane::new(Some(&self.data), params)
+	}
+	
+	pub fn create_space(&self, range: impl Into<RangeInclusive<i32>>) -> OdeSpace {
+		let range = range.into();
+		OdeSpace::new_hash(Some(&self.data), *range.start(), *range.end())
 	}
 
 	pub fn collide(&self, collision_manager: &mut PhyCollisionManager) {

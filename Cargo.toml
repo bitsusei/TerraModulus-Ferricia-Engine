@@ -2,7 +2,7 @@
 name = "terramodulus-ferricia-engine"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.85.0"
+rust-version = "1.91.0"
 
 [profile.release]
 panic = "unwind"
@@ -13,7 +13,7 @@ debug = true
 
 [lib]
 name = "ferricia"
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 opusic-sys = "0.5.5"

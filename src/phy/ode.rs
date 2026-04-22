@@ -5,12 +5,14 @@
 use crate::util::{concat_arrays, create_file_c, str_from_c};
 use getset::{Getters, MutGetters};
 use nalgebra_glm::{DMat3, DMat4, DMat4x3, DQuat, DVec3, DVec4};
-use ode_sys::{dBodyAddForce, dBodyAddForceAtPos, dBodyAddForceAtRelPos, dBodyAddRelForce, dBodyAddRelForceAtPos, dBodyAddRelForceAtRelPos, dBodyAddTorque, dBodyCreate, dBodyDestroy, dBodyDisable, dBodyEnable, dBodyGetAngularVel, dBodyGetForce, dBodyGetGravityMode, dBodyGetLinearVel, dBodyGetPosition, dBodyGetQuaternion, dBodyGetRotation, dBodyID, dBodyIsEnabled, dBodyIsKinematic, dBodySetAngularVel, dBodySetDynamic, dBodySetGravityMode, dBodySetKinematic, dBodySetLinearVel, dBodySetMass, dBodySetMovedCallback, dBodySetPosition, dBodySetQuaternion, dBodySetRotation, dCloseODE, dCollide, dContact, dContactGeom, dCreateBox, dCreateCapsule, dCreateCylinder, dCreatePlane, dCreateRay, dCreateSphere, dGeomBoxSetLengths, dGeomCapsuleSetParams, dGeomClearOffset, dGeomCylinderSetParams, dGeomDestroy, dGeomDisable, dGeomEnable, dGeomGetAABB, dGeomGetBody, dGeomGetOffsetPosition, dGeomGetOffsetQuaternion, dGeomGetOffsetRotation, dGeomGetPosition, dGeomGetQuaternion, dGeomGetRotation, dGeomID, dGeomIsEnabled, dGeomIsSpace, dGeomPlaneSetParams, dGeomRaySet, dGeomRaySetBackfaceCull, dGeomRaySetClosestHit, dGeomRaySetFirstContact, dGeomRaySetLength, dGeomRaySetParams, dGeomSetBody, dGeomSetOffsetPosition, dGeomSetOffsetQuaternion, dGeomSetOffsetRotation, dGeomSetOffsetWorldPosition, dGeomSetOffsetWorldQuaternion, dGeomSetOffsetWorldRotation, dGeomSetPosition, dGeomSetQuaternion, dGeomSetRotation, dGeomSphereSetRadius, dGetConfiguration, dHashSpaceCreate, dHashSpaceSetLevels, dInitODE, dJointCreateContact, dJointDestroy, dJointGroupCreate, dJointGroupDestroy, dJointGroupID, dJointID, dMass, dMassAdd, dMassAdjust, dMassRotate, dMassSetBox, dMassSetBoxTotal, dMassSetCapsule, dMassSetCapsuleTotal, dMassSetCylinder, dMassSetCylinderTotal, dMassSetParameters, dMassSetSphere, dMassSetSphereTotal, dMassSetTrimesh, dMassSetTrimeshTotal, dMassSetZero, dMassTranslate, dNormalize3, dQuadTreeSpaceCreate, dSimpleSpaceCreate, dSpaceAdd, dSpaceCollide, dSpaceCollide2, dSpaceDestroy, dSpaceGetNumGeoms, dSpaceID, dSpaceQuery, dSpaceRemove, dSurfaceParameters, dSweepAndPruneSpaceCreate, dWorldCreate, dWorldDestroy, dWorldExportDIF, dWorldGetAutoDisableFlag, dWorldGetCFM, dWorldGetERP, dWorldGetGravity, dWorldID, dWorldImpulseToForce, dWorldSetAutoDisableFlag, dWorldSetCFM, dWorldSetERP, dWorldSetGravity, dWorldStep};
+use ode_sys::{dBodyAddForce, dBodyAddForceAtPos, dBodyAddForceAtRelPos, dBodyAddRelForce, dBodyAddRelForceAtPos, dBodyAddRelForceAtRelPos, dBodyAddTorque, dBodyCreate, dBodyDestroy, dBodyDisable, dBodyEnable, dBodyGetAngularVel, dBodyGetForce, dBodyGetGravityMode, dBodyGetLinearVel, dBodyGetPosition, dBodyGetQuaternion, dBodyGetRotation, dBodyID, dBodyIsEnabled, dBodyIsKinematic, dBodySetAngularVel, dBodySetDynamic, dBodySetGravityMode, dBodySetKinematic, dBodySetLinearVel, dBodySetMass, dBodySetMovedCallback, dBodySetPosition, dBodySetQuaternion, dBodySetRotation, dCloseODE, dCollide, dContact, dContactGeom, dCreateBox, dCreateCapsule, dCreateCylinder, dCreatePlane, dCreateRay, dCreateSphere, dGeomBoxSetLengths, dGeomCapsuleSetParams, dGeomClearOffset, dGeomCylinderSetParams, dGeomDestroy, dGeomDisable, dGeomEnable, dGeomGetAABB, dGeomGetBody, dGeomGetOffsetPosition, dGeomGetOffsetQuaternion, dGeomGetOffsetRotation, dGeomGetPosition, dGeomGetQuaternion, dGeomGetRotation, dGeomID, dGeomIsEnabled, dGeomIsSpace, dGeomPlaneSetParams, dGeomRaySet, dGeomRaySetBackfaceCull, dGeomRaySetClosestHit, dGeomRaySetFirstContact, dGeomRaySetLength, dGeomRaySetParams, dGeomSetBody, dGeomSetCategoryBits, dGeomSetCollideBits, dGeomSetOffsetPosition, dGeomSetOffsetQuaternion, dGeomSetOffsetRotation, dGeomSetOffsetWorldPosition, dGeomSetOffsetWorldQuaternion, dGeomSetOffsetWorldRotation, dGeomSetPosition, dGeomSetQuaternion, dGeomSetRotation, dGeomSphereSetRadius, dGetConfiguration, dHashSpaceCreate, dHashSpaceSetLevels, dInitODE, dJointCreateContact, dJointDestroy, dJointGroupCreate, dJointGroupDestroy, dJointGroupID, dJointID, dMass, dMassAdd, dMassAdjust, dMassRotate, dMassSetBox, dMassSetBoxTotal, dMassSetCapsule, dMassSetCapsuleTotal, dMassSetCylinder, dMassSetCylinderTotal, dMassSetParameters, dMassSetSphere, dMassSetSphereTotal, dMassSetTrimesh, dMassSetTrimeshTotal, dMassSetZero, dMassTranslate, dNormalize3, dQuadTreeSpaceCreate, dSimpleSpaceCreate, dSpaceAdd, dSpaceCollide, dSpaceCollide2, dSpaceDestroy, dSpaceGetNumGeoms, dSpaceID, dSpaceQuery, dSpaceRemove, dSurfaceParameters, dSweepAndPruneSpaceCreate, dWorldCreate, dWorldDestroy, dWorldExportDIF, dWorldGetAutoDisableFlag, dWorldGetCFM, dWorldGetERP, dWorldGetGravity, dWorldID, dWorldImpulseToForce, dWorldSetAutoDisableFlag, dWorldSetCFM, dWorldSetERP, dWorldSetGravity, dWorldStep};
 use std::ffi::{c_void, CString};
 use std::marker::PhantomData;
 use std::mem::{transmute, MaybeUninit};
 use std::ptr::{null, null_mut};
+use by_address::ByAddress;
 use futures::StreamExt;
+use ordermap::OrderSet;
 use crate::phy::{PhyCollisionManager, PhyWorld};
 
 pub(super) struct OdeHandle {
@@ -385,6 +387,14 @@ pub trait OdeGeom : Drop {
 	/// This must be called by [Drop] impl.
 	fn drop(&mut self) {
 		unsafe { dGeomDestroy(self.id()) }
+	}
+
+	fn set_category_bits(&self, bits: u32) {
+		unsafe { dGeomSetCategoryBits(self.id(), bits) }
+	}
+
+	fn set_collide_bits(&self, bits: u32) {
+		unsafe { dGeomSetCollideBits(self.id(), bits) }
 	}
 
 	fn enable(&self) {
@@ -797,9 +807,18 @@ unsafe extern "C" fn near_callback(data: *mut c_void, o1: dGeomID, o2: dGeomID) 
 		if is_1_space || is_2_space {
 			// colliding a space with something :
 			dSpaceCollide2 (o1, o2, data, Some(near_callback));
-			// collide all geoms internal to the space(s)
-			if is_1_space { dSpaceCollide(o1 as _, data, Some(near_callback)); }
-			if is_2_space { dSpaceCollide(o2 as _, data, Some(near_callback)); }
+			let contact_manager = &mut *(data as *mut OdeContactManager);
+			for space in match (is_1_space, is_2_space) {
+				(true, true) => vec![o1, o2],
+				(true, false) => vec![o1],
+				(false, true) => vec![o2],
+				(false, false) => vec![],
+			} {
+				let v = ByAddress(Box::new(space as _));
+				if contact_manager.omitted_spaces.contains(&v) { return }
+				// collide all geoms internal to the space(s)
+				dSpaceCollide(space as _, data, Some(near_callback));
+			}
 		} else {
 			// colliding two non-space geoms, so generate contact
 			// points between o1 and o2
@@ -903,6 +922,7 @@ impl OdeSpace {
 
 pub struct OdeContactManager {
 	buf: Vec<dContactGeom>,
+	omitted_spaces: OrderSet<ByAddress<Box<dSpaceID>>>,
 }
 
 impl Default for OdeContactManager {
@@ -913,7 +933,14 @@ impl Default for OdeContactManager {
 
 impl OdeContactManager {
 	pub fn new() -> Self {
-		Self { buf: Vec::new() }
+		Self {
+			buf: Vec::new(),
+			omitted_spaces: OrderSet::new(),
+		}
+	}
+
+	pub fn omit_space(&mut self, space: &OdeSpace) {
+		self.omitted_spaces.insert(ByAddress(Box::new(space.id)));
 	}
 
 	pub(super) fn process(&mut self, world: &OdeWorld) {

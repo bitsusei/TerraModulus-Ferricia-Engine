@@ -316,7 +316,7 @@ impl<'a> DrawableSet<'a> {
 
 	/// Requires careful management
 	pub(crate) unsafe fn prim<T: RenderPrimitive>(&mut self) -> &mut T {
-		unsafe { (self.prim.as_mut() as &mut dyn Any).downcast_mut_unchecked() }
+		unsafe { (self.prim.as_mut() as &mut dyn Any).downcast_unchecked_mut() }
 	}
 
 	pub(crate) unsafe fn set_prim_pos(&self, pos: &[f32]) {
