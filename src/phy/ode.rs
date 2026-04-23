@@ -390,11 +390,11 @@ pub trait OdeGeom : Drop {
 	}
 
 	fn set_category_bits(&self, bits: u32) {
-		unsafe { dGeomSetCategoryBits(self.id(), bits) }
+		unsafe { dGeomSetCategoryBits(self.id(), bits as _) } // differ by OS but at least u32
 	}
 
 	fn set_collide_bits(&self, bits: u32) {
-		unsafe { dGeomSetCollideBits(self.id(), bits) }
+		unsafe { dGeomSetCollideBits(self.id(), bits as _) } // differ by OS but at least u32
 	}
 
 	fn enable(&self) {
