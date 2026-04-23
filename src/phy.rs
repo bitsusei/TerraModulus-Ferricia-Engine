@@ -58,7 +58,7 @@ impl PhyCollisionManager {
 	pub fn process(&mut self, world: &PhyWorld) {
 		self.contact_manager.process(&world.data)
 	}
-	
+
 	pub fn omit_space(&mut self, space: &OdeSpace) {
 		self.contact_manager.omit_space(space);
 	}
@@ -103,6 +103,9 @@ impl TopLevelSpace {
 		}
 	}
 
+	// In production, those `create_*` functions are not likely used, but within a lower-level OdeSpace.
+	// However, these would be useful in testing or demonstration for rapid creation without a need of sub-Space.
+
 	pub fn create_sphere(&self, radius: f64) -> OdeSphere {
 		OdeSphere::new(Some(&self.data), radius)
 	}
@@ -114,7 +117,7 @@ impl TopLevelSpace {
 	pub fn create_plane(&self, params: DVec4) -> OdePlane {
 		OdePlane::new(Some(&self.data), params)
 	}
-	
+
 	pub fn create_space(&self, range: impl Into<RangeInclusive<i32>>) -> OdeSpace {
 		let range = range.into();
 		OdeSpace::new_hash(Some(&self.data), *range.start(), *range.end())

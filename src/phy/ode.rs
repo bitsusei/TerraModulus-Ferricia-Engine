@@ -815,7 +815,7 @@ unsafe extern "C" fn near_callback(data: *mut c_void, o1: dGeomID, o2: dGeomID) 
 				(false, false) => vec![],
 			} {
 				let v = ByAddress(Box::new(space as _));
-				if contact_manager.omitted_spaces.contains(&v) { return }
+				if contact_manager.omitted_spaces.contains(&v) { break }
 				// collide all geoms internal to the space(s)
 				dSpaceCollide(space as _, data, Some(near_callback));
 			}

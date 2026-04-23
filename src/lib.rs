@@ -37,7 +37,7 @@ use crate::mui::{
 	MuiEvent,
 	SdlHandle,
 };
-use crate::phy::{OdeMass, OdePlaceableGeom, PhyBody, PhyCollisionManager, PhyEnv, PhyRawGeom, PhyRawGeomPlaceable, PhyWorld};
+use crate::phy::{OdeBox, OdeMass, OdeNonPlaceableMarker, OdePlaceableGeom, OdePlaceableMarker, OdeSpace, PhyBody, PhyCollisionManager, PhyEnv, PhyRawGeom, PhyRawGeomPlaceable, PhyWorld};
 use derive_more::From;
 use jni::objects::{JClass, JDoubleArray, JFloatArray, JIntArray, JObject, JString, ReleaseMode};
 use jni::sys::{jbyte, jdouble, jdoubleArray, jfloat, jfloatArray, jint, jintArray, jlong, jlongArray, jobjectArray, jsize, jstring};
@@ -1049,6 +1049,12 @@ jni_ferricia! {
 }
 
 jni_ferricia! {
+	Physics.omitPhyCollisionManagerSpace(mut env: JNIEnv, class: JClass, handle: jlong, space_handle: jlong) {
+		jni_ref_ptr::<PhyCollisionManager>(handle).omit_space(jni_ref_ptr::<OdeSpace>(handle))
+	}
+}
+
+jni_ferricia! {
 	Physics.newPhyWorld(mut env: JNIEnv, class: JClass, handle: jlong) -> jlong {
 		jni_to_ptr(jni_ref_ptr::<PhyEnv>(handle).create_world())
 	}
@@ -1065,6 +1071,12 @@ jni_ferricia! {
 		let mut mass = OdeMass::new();
 		mass.set_sphere_total(mass_val, radius);
 		jni_to_ptr(mass)
+	}
+}
+
+jni_ferricia! {
+	Physics.newPhyWorldSpace(mut env: JNIEnv, class: JClass, handle: jlong) -> jlong {
+		jni_to_ptr(jni_ref_ptr::<PhyWorld>(handle).create_space(2..=12))
 	}
 }
 
@@ -1113,6 +1125,15 @@ jni_ferricia! {
 }
 
 jni_ferricia! {
+	Physics.newSpacePhyGeomBox(mut env: JNIEnv, class: JClass, handle: jlong, lengths: jdoubleArray) -> jlong {
+		jni_get_arr!(arr = JDoubleArray; lengths, env);
+		jni_to_ptr(PhyRawGeom::new(
+			OdeBox::new(Some(jni_ref_ptr::<OdeSpace>(handle)), DVec3::new(arr[0], arr[1], arr[2]))
+		))
+	}
+}
+
+jni_ferricia! {
 	Physics.newWorldPhyGeomSphere(mut env: JNIEnv, class: JClass, handle: jlong, radius: jdouble) -> jlong {
 		jni_to_ptr(PhyRawGeom::new(
 			jni_ref_ptr::<PhyWorld>(handle).space().create_sphere(radius)
@@ -1126,6 +1147,24 @@ jni_ferricia! {
 		jni_to_ptr(PhyRawGeom::new(
 			jni_ref_ptr::<PhyWorld>(handle).space().create_plane(DVec4::new(arr[0], arr[1], arr[2], arr[3]))
 		))
+	}
+}
+
+jni_ferricia! {
+	Physics.setPhyGeomNonPlaceableBits(mut env: JNIEnv, class: JClass, handle: jlong, data: jintArray) {
+		jni_get_arr!(arr = JIntArray; data, env);
+		let geom = jni_ref_ptr::<PhyRawGeom<OdeNonPlaceableMarker>>(handle);
+		geom.set_category_bits(arr[0] as _);
+		geom.set_collide_bits(arr[1] as _);
+	}
+}
+
+jni_ferricia! {
+	Physics.setPhyGeomPlaceableBits(mut env: JNIEnv, class: JClass, handle: jlong, data: jintArray) {
+		jni_get_arr!(arr = JIntArray; data, env);
+		let geom = jni_ref_ptr::<PhyRawGeom<OdePlaceableMarker>>(handle);
+		geom.set_category_bits(arr[0] as _);
+		geom.set_collide_bits(arr[1] as _);
 	}
 }
 
