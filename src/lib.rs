@@ -1116,6 +1116,22 @@ jni_ferricia! {
 }
 
 jni_ferricia! {
+	Physics.getPhyBodyLinearVel(mut env: JNIEnv, class: JClass, handle: jlong) -> jdoubleArray {
+		let r = unsafe { jni_ref_ptr::<PhyBody>(handle).get_linear_vel() };
+		let arr = env.new_double_array(3).expect("Cannot create Java double array");
+		env.set_double_array_region(&arr, 0, r).expect("Cannot set Java double array");
+		arr.into_raw()
+	}
+}
+
+jni_ferricia! {
+	Physics.addPhyBodyForce(mut env: JNIEnv, class: JClass, handle: jlong, data: jdoubleArray) {
+		jni_get_arr!(arr = JDoubleArray; data, env);
+		unsafe { jni_ref_ptr::<PhyBody>(handle).add_force(arr[0], arr[1], arr[2]) }
+	}
+}
+
+jni_ferricia! {
 	Physics.newWorldPhyGeomBox(mut env: JNIEnv, class: JClass, handle: jlong, lengths: jdoubleArray) -> jlong {
 		jni_get_arr!(arr = JDoubleArray; lengths, env);
 		jni_to_ptr(PhyRawGeom::new(

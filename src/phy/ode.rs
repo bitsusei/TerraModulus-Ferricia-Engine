@@ -836,7 +836,7 @@ unsafe extern "C" fn near_callback(data: *mut c_void, o1: dGeomID, o2: dGeomID) 
 					unsafe { *vec == 0.0 && *vec.add(1) == 0.0 && *vec.add(2) == 0.0 }
 				}
 				unsafe {
-					is_zero(dBodyGetLinearVel(body)) && is_zero(dBodyGetForce(body))
+					!is_zero(dBodyGetLinearVel(body)) || !is_zero(dBodyGetForce(body))
 				}
 			}
 			if (g1.is_none() || g1.is_some() && !is_moving(g1.unwrap())) &&

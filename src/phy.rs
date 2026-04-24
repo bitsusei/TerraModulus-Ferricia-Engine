@@ -197,6 +197,20 @@ impl PhyBody {
 		self.data.as_ref().unwrap().set_linear_vel(x, y, z);
 	}
 
+	/// # Safety
+	///
+	/// Caller must make sure this object contains a valid [`OdeBody`].
+	pub unsafe fn get_linear_vel(&self) -> &[f64; 3] {
+		self.data.as_ref().unwrap().get_linear_vel()
+	}
+
+	/// # Safety
+	///
+	/// Caller must make sure this object contains a valid [`OdeBody`].
+	pub unsafe fn add_force(&self, x: f64, y: f64, z: f64) {
+		self.data.as_ref().unwrap().add_force(x, y, z);
+	}
+
 	pub fn add_geom(&mut self, geom: &PhyRawGeom<OdePlaceableMarker>) {
 		if let Some(body) = &self.data {
 			geom.data.set_body(body);
