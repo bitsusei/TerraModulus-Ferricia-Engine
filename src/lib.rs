@@ -1044,7 +1044,7 @@ jni_ferricia! {
 
 jni_ferricia! {
 	Physics.processPhyCollisionManager(mut env: JNIEnv, class: JClass, handle: jlong, world_handle: jlong) {
-		jni_ref_ptr::<PhyCollisionManager>(handle).process(jni_ref_ptr::<PhyWorld>(handle))
+		jni_ref_ptr::<PhyCollisionManager>(handle).process(jni_ref_ptr::<PhyWorld>(world_handle))
 	}
 }
 
@@ -1062,7 +1062,7 @@ jni_ferricia! {
 
 jni_ferricia! {
 	Physics.tickPhyWorld(mut env: JNIEnv, class: JClass, handle: jlong, cm_handle: jlong) {
-		jni_ref_ptr::<PhyWorld>(handle).tick(jni_ref_ptr::<PhyCollisionManager>(handle))
+		jni_ref_ptr::<PhyWorld>(handle).tick(jni_ref_ptr::<PhyCollisionManager>(cm_handle))
 	}
 }
 

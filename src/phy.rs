@@ -198,6 +198,9 @@ impl PhyBody {
 	}
 
 	pub fn add_geom(&mut self, geom: &PhyRawGeom<OdePlaceableMarker>) {
+		if let Some(body) = &self.data {
+			geom.data.set_body(body);
+		}
 		self.geoms.insert(ByAddress(geom.data.clone()));
 	}
 
