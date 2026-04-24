@@ -40,7 +40,7 @@ use crate::mui::{
 use crate::phy::{OdeBox, OdeMass, OdeNonPlaceableMarker, OdePlaceableGeom, OdePlaceableMarker, OdeSpace, PhyBody, PhyCollisionManager, PhyEnv, PhyRawGeom, PhyRawGeomPlaceable, PhyWorld};
 use derive_more::From;
 use jni::objects::{JClass, JDoubleArray, JFloatArray, JIntArray, JObject, JString, ReleaseMode};
-use jni::sys::{jbyte, jdouble, jdoubleArray, jfloat, jfloatArray, jint, jintArray, jlong, jlongArray, jobjectArray, jsize, jstring};
+use jni::sys::{jboolean, jbyte, jdouble, jdoubleArray, jfloat, jfloatArray, jint, jintArray, jlong, jlongArray, jobjectArray, jsize, jstring};
 use jni::JNIEnv;
 use nalgebra_glm::{DQuat, DVec3, DVec4, Vec3};
 use paste::paste;
@@ -1049,6 +1049,12 @@ jni_ferricia! {
 }
 
 jni_ferricia! {
+	Physics.setPhyCollisionManagerFriction(mut env: JNIEnv, class: JClass, handle: jlong, data: jdouble) {
+		jni_ref_ptr::<PhyCollisionManager>(handle).set_friction(data)
+	}
+}
+
+jni_ferricia! {
 	Physics.omitPhyCollisionManagerSpace(mut env: JNIEnv, class: JClass, handle: jlong, space_handle: jlong) {
 		jni_ref_ptr::<PhyCollisionManager>(handle).omit_space(jni_ref_ptr::<OdeSpace>(handle))
 	}
@@ -1057,6 +1063,13 @@ jni_ferricia! {
 jni_ferricia! {
 	Physics.newPhyWorld(mut env: JNIEnv, class: JClass, handle: jlong) -> jlong {
 		jni_to_ptr(jni_ref_ptr::<PhyEnv>(handle).create_world())
+	}
+}
+
+jni_ferricia! {
+	Physics.setPhyWorldGravity(mut env: JNIEnv, class: JClass, handle: jlong, data: jdoubleArray) {
+		jni_get_arr!(arr = JDoubleArray; data, env);
+		jni_ref_ptr::<PhyWorld>(handle).set_gravity(arr[0], arr[1], arr[2]);
 	}
 }
 
@@ -1103,6 +1116,12 @@ jni_ferricia! {
 	Physics.setPhyBodyLinearVel(mut env: JNIEnv, class: JClass, handle: jlong, data: jdoubleArray) {
 		jni_get_arr!(arr = JDoubleArray; data, env);
 		unsafe { jni_ref_ptr::<PhyBody>(handle).set_linear_vel(arr[0], arr[1], arr[2]) }
+	}
+}
+
+jni_ferricia! {
+	Physics.setPhyBodyGravityMode(mut env: JNIEnv, class: JClass, handle: jlong, data: jboolean) {
+		unsafe { jni_ref_ptr::<PhyBody>(handle).set_gravity_mode(data != 0) }
 	}
 }
 

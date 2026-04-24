@@ -61,6 +61,7 @@ static STANDARD_SCALING: f32 = 64.;
 pub(crate) struct Camera3d {
 	proj_mat: Mat4,
 	view_mat: Mat4,
+	canvas_size: (u32, u32),
 	zoom_level: f32,
 }
 
@@ -70,12 +71,14 @@ impl Camera3d {
 		Self {
 			proj_mat: ortho_proj_mat(canvas_size, STANDARD_SCALING),
 			view_mat: look_view_mat(pos),
+			canvas_size,
 			zoom_level: 1.0,
 		}
 	}
 
 	pub(super) fn refresh_canvas_size(&mut self, canvas_size: (u32, u32)) {
 		self.proj_mat = ortho_proj_mat(canvas_size, self.zoom_level * STANDARD_SCALING);
+		self.canvas_size = canvas_size;
 	}
 
 	pub(crate) fn refresh_pos(&mut self, pos: Vec3) {
@@ -84,6 +87,7 @@ impl Camera3d {
 
 	/// Zoom level is the factor based on the Standard Scaling.
 	pub(crate) fn set_zoom_level(&mut self, zoom_level: f32) {
+		self.proj_mat = ortho_proj_mat(self.canvas_size, zoom_level * STANDARD_SCALING);
 		self.zoom_level = zoom_level;
 	}
 

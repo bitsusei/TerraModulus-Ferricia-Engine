@@ -59,6 +59,10 @@ impl PhyCollisionManager {
 		self.contact_manager.process(&world.data)
 	}
 
+	pub fn set_friction(&mut self, friction: f64) {
+		self.contact_manager.set_friction(friction);
+	}
+
 	pub fn omit_space(&mut self, space: &OdeSpace) {
 		self.contact_manager.omit_space(space);
 	}
@@ -79,6 +83,10 @@ impl PhyWorld {
 			space: TopLevelSpace::new(),
 			objs: OrderSet::default(),
 		}
+	}
+	
+	pub fn set_gravity(&self, x: f64, y: f64, z: f64) {
+		self.data.set_gravity(x, y, z);
 	}
 
 	pub fn new_body(&self, mass: OdeMass) -> PhyBody {
@@ -202,6 +210,13 @@ impl PhyBody {
 	/// Caller must make sure this object contains a valid [`OdeBody`].
 	pub unsafe fn get_linear_vel(&self) -> &[f64; 3] {
 		self.data.as_ref().unwrap().get_linear_vel()
+	}
+
+	/// # Safety
+	///
+	/// Caller must make sure this object contains a valid [`OdeBody`].
+	pub unsafe fn set_gravity_mode(&self, mode: bool) {
+		self.data.as_ref().unwrap().set_gravity_mode(mode);
 	}
 
 	/// # Safety

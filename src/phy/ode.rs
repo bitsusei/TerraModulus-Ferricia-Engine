@@ -928,6 +928,7 @@ struct OdeContactParams {
 }
 
 pub struct OdeContactManager {
+	friction: f64,
 	buf: Vec<OdeContactParams>,
 	joints: Vec<OdeJoint>,
 	omitted_spaces: OrderSet<ByAddress<Box<dSpaceID>>>,
@@ -942,10 +943,15 @@ impl Default for OdeContactManager {
 impl OdeContactManager {
 	pub fn new() -> Self {
 		Self {
+			friction: f64::INFINITY,
 			buf: Vec::new(),
 			joints: Vec::new(),
 			omitted_spaces: OrderSet::new(),
 		}
+	}
+
+	pub fn set_friction(&mut self, friction: f64) {
+		self.friction = friction;
 	}
 
 	pub fn omit_space(&mut self, space: &OdeSpace) {
@@ -954,7 +960,7 @@ impl OdeContactManager {
 
 	pub(super) fn process(&mut self, world: &OdeWorld) {
 		for params in self.buf.drain(..) {
-			let joint = world.new_joint_contact(OdeContact::new(params.geom));
+			let joint = world.new_joint_contact(OdeContact::new(params.geom, self.friction));
 			joint.attach(params.body1, params.body2);
 			self.joints.push(joint);
 		}
@@ -963,18 +969,19 @@ impl OdeContactManager {
 
 pub struct OdeContact {
 	geom: dContactGeom,
+	mu: f64,
 }
 
 impl OdeContact {
-	fn new(geom: dContactGeom) -> Self {
-		Self { geom }
+	fn new(geom: dContactGeom, mu: f64) -> Self {
+		Self { geom, mu }
 	}
 
 	fn into_inner(self) -> dContact {
 		// TODO fill in other fields
 		let mut surface = MaybeUninit::<dSurfaceParameters>::uninit();
 		unsafe { (&raw mut (*surface.as_mut_ptr()).mode).write(0); }
-		unsafe { (&raw mut (*surface.as_mut_ptr()).mu).write(f64::INFINITY); }
+		unsafe { (&raw mut (*surface.as_mut_ptr()).mu).write(self.mu); }
 		let surface = unsafe { surface.assume_init() };
 		#[allow(clippy::uninit_assumed_init, invalid_value)]
 		dContact {
