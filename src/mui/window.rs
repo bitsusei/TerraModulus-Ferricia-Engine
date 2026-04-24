@@ -42,6 +42,8 @@ impl WindowHandle {
 			.resizable()
 			.build()?;
 		window.set_minimum_size(MIN_WIDTH, MIN_HEIGHT)?;
+		sdl_handle.video.text_input().start(&window);
+		sdl_handle.video.text_input().stop(&window);
 		let gl_context = window.gl_create_context()?;
 		window.gl_make_current(&gl_context)?;
 		gl::load_with(|s| sdl_handle.video.gl_get_proc_address(s).map_or(null::<fn()>(), |f| f as *const _) as *const _);

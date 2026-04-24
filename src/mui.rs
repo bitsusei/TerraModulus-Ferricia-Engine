@@ -256,7 +256,7 @@ impl SdlDisplay {
 			})?,
 		})
 	}
-	
+
 	fn update_bounds(&mut self, display: Display) -> Result<(), sdl3::Error> {
 		self.bounds = display.get_bounds()?;
 		self.usable_bounds = display.get_usable_bounds()?;
