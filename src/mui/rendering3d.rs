@@ -44,16 +44,16 @@ use array_macro::array;
 use csgrs::mesh::Mesh;
 use csgrs::traits::CSG;
 use gl::{ARRAY_BUFFER, DYNAMIC_DRAW, ELEMENT_ARRAY_BUFFER, LINES, STATIC_DRAW, TRIANGLES};
-use nalgebra_glm::{identity, look_at, quat_to_mat4, scale, scaling, translate, translation, DQuat, Mat4, Vec3, Vec4};
+use nalgebra_glm::{identity, look_at, quat_to_mat4, scale, scaling, translate, translation, DMat4, DQuat, DVec3, Mat4, Vec3, Vec4};
 use sdl3::pixels::Color;
-use std::f32::consts::PI;
 use std::sync::LazyLock;
+use num_traits::FloatConst;
 
 static IDENT_MAT_4: LazyLock<Mat4> = LazyLock::new(identity);
 /// It should be rotating about x-axis with -60 degrees, but somehow this function is treating
 /// parameters the opposite sign. This literally means 60 degrees, but when computed,
 /// it is the result as if the value of -60 degrees is inputted.
-static CAMERA_DIR: LazyLock<Mat4> = LazyLock::new(|| Mat4::new_rotation(Vec3::new(PI / 3., 0., 0.)));
+static CAMERA_DIR: LazyLock<DMat4> = LazyLock::new(|| DMat4::new_rotation(DVec3::new(f64::PI() / 3., 0., 0.)));
 /// The direction of light pointing South with 45 degrees of depression.
 static LIGHT_DIR: LazyLock<Vec3> = LazyLock::new(|| Vec3::new(0., -1., 1.).normalize());
 static STANDARD_SCALING: f32 = 64.;
@@ -100,9 +100,9 @@ impl Camera3d {
 
 fn ortho_proj_mat(size: (u32, u32), scale: f32) -> Mat4 {
 	let (width, height) = size;
-	let scale = Vec3::new(scale, scale, 0.);
+	let scale = Vec3::new(scale, scale, 0.).cast();
 	// Centering offset of Camera
-	let offset = Vec3::new(width as f32 / 2., height as f32 / 2., 0.);
+	let offset = DVec3::new(width as f64 / 2., height as f64 / 2., 0.);
 	// Using GLM's `ortho` causes problematic result on INF by (0, width, 0, height, -INF, INF)
 	// Where bottom-left is the origin,
 	// [ 2/(r-l),        0,        0, -(r+l)/(r-l),
@@ -120,12 +120,12 @@ fn ortho_proj_mat(size: (u32, u32), scale: f32) -> Mat4 {
 	//     0, 2/h, 0, -1,
 	//     0,   0, 0,  0,
 	//     0,   0, 0,  1 ]
-	Mat4::new(
-		2. / width as f32, 0., 0., -1.,
-		0., 2. / height as f32, 0., -1.,
+	(DMat4::new(
+		2. / width as f64, 0., 0., -1.,
+		0., 2. / height as f64, 0., -1.,
 		0., 0., 0., 0.,
 		0., 0., 0., 1.,
-	) * translation(&offset) * scaling(&scale)
+	) * translation(&offset) * scaling(&scale)).cast()
 }
 
 fn look_view_mat(mut pos: Vec3) -> Mat4 {
@@ -142,7 +142,7 @@ fn look_view_mat(mut pos: Vec3) -> Mat4 {
 	// it becomes -60 degrees about x-axis, with 30-degree rotation about x-axis on the former.
 	// Inversion of coordinates is done to cancel out the offsets of camera.
 	pos = -pos;
-	*CAMERA_DIR * translation(&pos)
+	(*CAMERA_DIR * translation(&pos.cast())).cast()
 }
 
 /// Gameplay World Rendering (GWR) Program
@@ -220,9 +220,9 @@ impl DrawableWorldObj {
 
 	/// Scaling matrix from `[-1, 1]` to a form; for example, times .5 to size of one meter.
 	/// Position must be based on values of the Center of Gravity (CoG).
-	pub fn update_model(&mut self, pos: Vec3, q: DQuat, scale: Vec3) {
+	pub fn update_model(&mut self, pos: DVec3, q: DQuat, scale: DVec3) {
 		// Translation from Origin to World Coordinates by CoG, after scaling and rotation
-		self.model = translation(&pos) * quat_to_mat4(&q).cast() * scaling(&scale);
+		self.model = (translation(&pos) * quat_to_mat4(&q) * scaling(&scale)).cast();
 	}
 }
 

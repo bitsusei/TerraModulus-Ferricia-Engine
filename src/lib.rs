@@ -997,13 +997,12 @@ jni_ferricia! {
 }
 
 jni_ferricia! {
-	client:Gwr.updateWorldObjModel(mut env: JNIEnv, class: JClass, obj_handle: jlong, data1: jfloatArray, data2: jdoubleArray) {
-		jni_get_arr!(arr1 = JFloatArray; data1, env);
-		jni_get_arr!(arr2 = JDoubleArray; data2, env);
+	client:Gwr.updateWorldObjModel(mut env: JNIEnv, class: JClass, obj_handle: jlong, data: jdoubleArray) {
+		jni_get_arr!(arr = JDoubleArray; data, env);
 		jni_ref_ptr::<DrawableWorldObj>(obj_handle).update_model(
-			Vec3::new(arr1[0], arr1[1], arr1[2]),
-			DQuat::new(arr2[0], arr2[1], arr2[2], arr2[3]),
-			Vec3::new(arr1[3], arr1[4], arr1[5]),
+			DVec3::new(arr[0], arr[1], arr[2]),
+			DQuat::new(arr[3], arr[4], arr[5], arr[6]),
+			DVec3::new(arr[7], arr[8], arr[9]),
 		)
 	}
 }
