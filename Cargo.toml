@@ -50,6 +50,7 @@ ordermap = "0.5.2"
 by_address = "1.2.1"
 array-macro = "2.1.8"
 csgrs = { version =  "0.20.1", default-features = false, features = ["f32", "delaunay", "offset"] }
+bytemuck = "1.25.0"
 
 [target.'cfg(windows)'.dev-dependencies]
 criterion = { version = "0.8.2", features = ["html_reports"] }

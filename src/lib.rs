@@ -39,8 +39,8 @@ use crate::mui::{
 };
 use crate::phy::{OdeBox, OdeMass, OdeNonPlaceableMarker, OdePlaceableGeom, OdePlaceableMarker, OdeSpace, PhyBody, PhyCollisionManager, PhyEnv, PhyRawGeom, PhyRawGeomPlaceable, PhyWorld};
 use derive_more::From;
-use jni::objects::{JClass, JDoubleArray, JFloatArray, JIntArray, JObject, JString, ReleaseMode};
-use jni::sys::{jboolean, jbyte, jdouble, jdoubleArray, jfloat, jfloatArray, jint, jintArray, jlong, jlongArray, jobjectArray, jsize, jstring};
+use jni::objects::{JByteArray, JClass, JDoubleArray, JFloatArray, JIntArray, JObject, JString, ReleaseMode};
+use jni::sys::{jboolean, jbyte, jbyteArray, jdouble, jdoubleArray, jfloat, jfloatArray, jint, jintArray, jlong, jlongArray, jobjectArray, jsize, jstring};
 use jni::JNIEnv;
 use nalgebra_glm::{DQuat, DVec3, DVec4, Vec3};
 use paste::paste;
@@ -51,6 +51,7 @@ use std::env::set_var;
 use std::fmt::Display;
 use std::panic::{catch_unwind, take_hook, AssertUnwindSafe};
 use std::ptr::{from_raw_parts, null};
+use bytemuck::cast_slice;
 
 #[derive(From)]
 struct FerriciaError(String);
@@ -783,9 +784,9 @@ jni_ferricia! {
 }
 
 jni_ferricia! {
-	client:Mui.loadImageToCanvas(mut env: JNIEnv, class: JClass, handle: jlong, path: JString) -> jint {
-		jni_ref_ptr::<CanvasHandle>(handle).load_image(env.get_string(&path)
-			.expect("Cannot get Java string").into()) as jint
+	client:Mui.loadImageToCanvas(mut env: JNIEnv, class: JClass, handle: jlong, data: jbyteArray) -> jint {
+		jni_get_arr!(arr = JByteArray; data, env);
+		jni_ref_ptr::<CanvasHandle>(handle).load_image(cast_slice(&*arr)) as jint
 	}
 }
 

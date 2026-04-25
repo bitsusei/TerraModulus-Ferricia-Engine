@@ -19,6 +19,7 @@ use std::borrow::Cow;
 use std::cell::Cell;
 use std::fs::read_to_string;
 use std::hash::{Hash, Hasher};
+use std::io::Cursor;
 use std::mem::MaybeUninit;
 use std::ptr;
 use std::sync::{Arc, LazyLock};
@@ -57,9 +58,10 @@ impl CanvasHandle {
 	// 	self.drawable_sets.get(&id).expect("should exist")
 	// }
 
-	pub(crate) fn load_image(&self, path: String) -> u32 {
-		let mut img = ImageReader::open(path)
-			.expect("Cannot open image")
+	pub(crate) fn load_image(&self, data: &[u8]) -> u32 {
+		let mut img = ImageReader::new(Cursor::new(data))
+			.with_guessed_format()
+			.expect("unknown format")
 			.decode()
 			.expect("Cannot decode image")
 			.into_rgba8();
@@ -144,8 +146,8 @@ fn ortho_proj_mat(size: (u32, u32)) -> TMat4<f32> {
 }
 
 /// Not in production
-pub(super) fn compile_shader_from(kind: ShaderType, path: String) -> FerriciaResult<u32> {
-	Ok(compile_shader(read_to_string(path).expect("Cannot read the file"), kind)?)
+pub(super) fn compile_shader_from(kind: ShaderType, src: String) -> FerriciaResult<u32> {
+	Ok(compile_shader(src, kind)?)
 }
 
 pub(crate) trait GuiProgram {
