@@ -1,11 +1,14 @@
 [package]
 name = "terramodulus-ferricia-engine"
-version = "0.1.0"
+version = "0.0.1"
 edition = "2024"
 rust-version = "1.91.0"
 
 [profile.release]
 panic = "unwind"
+strip = true
+lto = "fat"
+opt-level = "z"
 
 [profile.dev]
 panic = "unwind"

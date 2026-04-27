@@ -3933,7 +3933,7 @@ dependencies = [
 
 [[package]]
 name = "terramodulus-ferricia-engine"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "array-macro",
  "by_address",
