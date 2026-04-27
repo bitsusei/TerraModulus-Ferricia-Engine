@@ -18,7 +18,7 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 opusic-sys = "0.5.5"
 libflac-sys = "0.3"
-sdl3 = { version = "0.14.27", features = ["build-from-source", "build-from-source-unix-console"] }
+sdl3 = { version = "0.18.0", features = ["build-from-source", "build-from-source-unix-console"] }
 ode-sys = { path = "ode" }
 openal-soft-sys = { path = "openal-soft" }
 gl = "0.14.0"

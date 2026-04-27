@@ -9,7 +9,7 @@ use crate::{FerriciaError, FerriciaResult};
 use sdl3::event::{DisplayEvent, Event, WindowEvent};
 use sdl3::keyboard::Scancode;
 use sdl3::mouse::MouseButton;
-use sdl3::video::{Display, DisplayMode};
+use sdl3::video::{Display, DisplayMode, GLProfile};
 use sdl3::{AudioSubsystem, EventPump, EventSubsystem, GamepadSubsystem, HapticSubsystem, JoystickSubsystem, Sdl, VideoSubsystem};
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -55,6 +55,7 @@ impl SdlHandle {
 	pub(crate) fn new() -> FerriciaResult<SdlHandle> {
 		let sdl_context = sdl3::init()?;
 		let video = sdl_context.video()?;
+		video.gl_attr().set_context_profile(GLProfile::Core); // Prevent ES
 		let mut displays = HashMap::new();
 		video.displays()?.into_iter().for_each(|d| {
 			if let Ok(v) = SdlDisplay::new(&d) {

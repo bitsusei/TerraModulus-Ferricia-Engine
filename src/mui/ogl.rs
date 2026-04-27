@@ -93,9 +93,9 @@ impl GLHandle {
 			gl_context,
 			vendor: get_string(VENDOR),
 			renderer: get_string(RENDERER),
-			gl_version: parse_version(&full_gl_version),
+			gl_version: parse_version(&full_gl_version)?,
 			full_gl_version,
-			glsl_version: parse_version(&full_glsl_version),
+			glsl_version: parse_version(&full_glsl_version)?,
 			full_glsl_version,
 			extensions: get_extensions(),
 			features: HashSet::new(),
@@ -158,11 +158,17 @@ fn get_extensions() -> HashSet<String> {
 }
 
 static VERSION_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^(\d+)\.(\d+)").expect("invalid regex"));
+static ES_VERSION_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^OpenGL ES (\d+)\.(\d+)").expect("invalid regex"));
 
 /// Only parses the first two parts (major, minor) of the version string.
-fn parse_version(version_str: &str) -> Version {
-	let caps = VERSION_REGEX.captures(version_str).expect("invalid version string");
-	Version::new(caps[1].parse().unwrap(), caps[2].parse().unwrap(), 0)
+fn parse_version(version_str: &str) -> Result<Version, String> {
+	match VERSION_REGEX.captures(version_str) {
+		Some(caps) => Ok(Version::new(caps[1].parse().unwrap(), caps[2].parse().unwrap(), 0)),
+		None => Err({
+			if !ES_VERSION_REGEX.is_match(version_str) { panic!("invalid version string: {}", version_str); }
+			format!("OpenGL ES is not supported; found: {}", version_str)
+		}),
+	}
 }
 
 fn str_from_gl(string: *const GLubyte) -> &'static str {
