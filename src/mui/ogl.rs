@@ -89,17 +89,19 @@ impl GLHandle {
 	pub(crate) fn new(gl_context: GLContext) -> Result<Self, String> {
 		let full_gl_version = get_string(VERSION);
 		let full_glsl_version = get_string(SHADING_LANGUAGE_VERSION);
-		let mut instance = Self {
+		let gl_version = parse_version(&full_gl_version)?;
+		let handle = Self {
 			gl_context,
 			vendor: get_string(VENDOR),
 			renderer: get_string(RENDERER),
-			gl_version: parse_version(&full_gl_version)?,
+			extensions: get_extensions(&gl_version),
+			gl_version,
 			full_gl_version,
 			glsl_version: parse_version(&full_glsl_version)?,
 			full_glsl_version,
-			extensions: get_extensions(),
 			features: HashSet::new(),
 		};
+		let mut instance = handle;
 		instance.check_requirements()?;
 		setup();
 		Ok(instance)
@@ -146,15 +148,20 @@ fn get_string(name: GLenum) -> String {
 	unsafe { str_from_gl(GetString(name)).to_string() }
 }
 
-fn get_extensions() -> HashSet<String> {
-	let mut data = MaybeUninit::uninit();
-	unsafe { GetIntegerv(NUM_EXTENSIONS, data.as_mut_ptr()); }
-	let num = unsafe { data.assume_init() } as u32;
-	let mut data = HashSet::with_capacity(num as usize);
-	for i in 0..num {
-		data.insert(str_from_gl(unsafe { GetStringi(EXTENSIONS, i as GLuint) }).to_string());
+fn get_extensions(version: &Version) -> HashSet<String> {
+	if version < &VER_3_0 {
+		let data = str_from_gl(unsafe { GetString(EXTENSIONS) });
+		data.split(' ').map(|s| s.to_string()).collect()
+	} else {
+		let mut num = MaybeUninit::uninit();
+		unsafe { GetIntegerv(NUM_EXTENSIONS, num.as_mut_ptr()); }
+		let num = unsafe { num.assume_init() } as u32;
+		let mut data = HashSet::with_capacity(num as usize);
+		for i in 0..num {
+			data.insert(str_from_gl(unsafe { GetStringi(EXTENSIONS, i as GLuint) }).to_string());
+		}
+		data
 	}
-	data
 }
 
 static VERSION_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^(\d+)\.(\d+)").expect("invalid regex"));
