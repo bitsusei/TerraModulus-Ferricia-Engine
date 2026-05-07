@@ -5,19 +5,18 @@
 
 #![allow(private_interfaces)]
 
-use std::any::Any;
 use crate::mui::ogl::{buf_obj_with_data, compile_shader, draw_arrays, draw_elements, gen_buf_obj, gen_buf_objs, get_uniform_location, new_shader_program, update_buf_obj, use_program, use_texture_2d, use_uniform_mat_4, use_vao, vert_attr, vert_attr_arr, with_new_vert_arr, GLHandle, NumType, ShaderType, VertexAttrVariant};
 use crate::mui::window::WindowHandle;
 use crate::FerriciaResult;
 use gl::{BindTexture, GenTextures, GenerateMipmap, TexImage2D, TexParameteri, ARRAY_BUFFER, CLAMP_TO_EDGE, DYNAMIC_DRAW, ELEMENT_ARRAY_BUFFER, LINES, NEAREST, NEAREST_MIPMAP_LINEAR, RGBA, STATIC_DRAW, TEXTURE_2D, TEXTURE_MAG_FILTER, TEXTURE_MIN_FILTER, TEXTURE_WRAP_S, TEXTURE_WRAP_T, TRIANGLES, UNSIGNED_BYTE};
 use image::imageops::flip_vertical_in_place;
 use image::ImageReader;
-use nalgebra_glm::{identity, ortho, scaling, translation, vec2, vec2_to_vec3, vec3, TMat4, TVec2, Vec3};
+use nalgebra_glm::{identity, mat3_to_mat4, ortho, rotation, rotation2d, scaling, translation, vec2, vec2_to_vec3, vec3, DVec3, Mat4, TMat4, TVec2, Vec3};
 use ordermap::OrderSet;
 use sdl3::pixels::Color;
+use std::any::Any;
 use std::borrow::Cow;
 use std::cell::Cell;
-use std::fs::read_to_string;
 use std::hash::{Hash, Hasher};
 use std::io::Cursor;
 use std::mem::MaybeUninit;
@@ -571,6 +570,67 @@ impl PartialEq for &dyn PrimModelTransform {
 }
 
 impl Eq for &dyn PrimModelTransform {}
+
+pub(crate) struct GeneralTransform {
+	scale: DVec3,
+	angle: f64,
+	pos: DVec3,
+	model: Mat4,
+}
+
+impl GeneralTransform {
+	pub fn new(scale: DVec3, angle: f64, pos: DVec3) -> Self {
+		Self {
+			model: Self::eval_model(&scale, angle, &pos),
+			scale,
+			angle,
+			pos,
+		}
+	}
+
+	fn eval_model(scale: &DVec3, angle: f64, pos: &DVec3) -> Mat4 {
+		let r = rotation2d(angle);
+		(translation(&pos) * mat3_to_mat4(&r) * scaling(&scale)).cast() // SRT
+	}
+
+	fn update_model(&mut self) {
+		self.model = Self::eval_model(&self.scale, self.angle, &self.pos);
+	}
+
+	pub fn update(&mut self, scale: DVec3, angle: f64, pos: DVec3) {
+		self.model = Self::eval_model(&scale, angle, &pos);
+		self.scale = scale;
+		self.angle = angle;
+		self.pos = pos;
+	}
+
+	pub fn update_scale(&mut self, scale: DVec3) {
+		self.scale = scale;
+		self.update_model();
+	}
+
+	pub fn update_angle(&mut self, angle: f64) {
+		self.angle = angle;
+		self.update_model();
+	}
+
+	pub fn update_pos(&mut self, pos: DVec3) {
+		self.pos = pos;
+		self.update_model();
+	}
+
+	pub fn update_scale_angle(&mut self, scale: DVec3, angle: f64) {
+		self.scale = scale;
+		self.angle = angle;
+		self.update_model();
+	}
+}
+
+impl PrimModelTransform for GeneralTransform {
+	fn model_matrix(&self, drawing_context: &DrawingContext) -> TMat4<f32> {
+		self.model
+	}
+}
 
 /// Smart-Scaled Mesh depending on the current window size.
 /// This transformation works well for a coordinate system with origin in a corner

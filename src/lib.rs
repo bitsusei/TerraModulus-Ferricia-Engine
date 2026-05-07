@@ -52,6 +52,7 @@ use std::fmt::Display;
 use std::panic::{catch_unwind, take_hook, AssertUnwindSafe};
 use std::ptr::{from_raw_parts, null};
 use bytemuck::cast_slice;
+use crate::mui::rendering::GeneralTransform;
 
 #[derive(From)]
 struct FerriciaError(String);
@@ -851,6 +852,20 @@ jni_ferricia! {
 	client:Mui.setGeomPos(mut env: JNIEnv, class: JClass, handle: jlong, data: jfloatArray) {
 		jni_get_arr!(arr = JFloatArray; data, env);
 		unsafe { jni_ref_ptr::<DrawableSet>(handle).set_prim_pos(&arr) }
+	}
+}
+
+jni_ferricia! {
+	client:Mui.modelGeneralTransform(mut env: JNIEnv, class: JClass, data: jdoubleArray) -> jlongArray {
+		jni_get_arr!(arr = JDoubleArray; data, env);
+		jni_to_destructed_ptr!(GeneralTransform::new(DVec3::new(arr[0], arr[1], 1.), arr[2], DVec3::new(arr[3], arr[4], 0.)), dyn PrimModelTransform, env);
+	}
+}
+
+jni_ferricia! {
+	client:Mui.updateGeneralTransform(mut env: JNIEnv, class: JClass, model_handle: jlong, data: jdoubleArray) {
+		jni_get_arr!(arr = JDoubleArray; data, env);
+		jni_ref_ptr::<GeneralTransform>(model_handle).update(DVec3::new(arr[0], arr[1], 1.), arr[2], DVec3::new(arr[3], arr[4], 0.))
 	}
 }
 
