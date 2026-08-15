@@ -37,7 +37,7 @@
 //! including "2.5D" objects (most likely particles) where the 2D textures always face to the camera.
 //!
 //! [Canvas]: super::rendering::CanvasHandle
-use crate::mui::ogl::{buf_obj_with_data, draw_arrays, draw_elements, gen_buf_obj, gen_buf_objs, get_uniform_location, new_shader_program, update_buf_obj, use_program, use_uniform_mat_4, use_uniform_vec_3, vert_attr, vert_attr_arr, with_new_vert_arr, NumType, ShaderType, VertexAttrVariant};
+use crate::mui::ogl::{GLHandle, NumType, ShaderType, VertexAttrVariant};
 use crate::mui::rendering::{compile_shader_from, Geom, RenderPrimitive};
 use crate::FerriciaResult;
 use array_macro::array;
@@ -47,6 +47,7 @@ use gl::{ARRAY_BUFFER, DYNAMIC_DRAW, ELEMENT_ARRAY_BUFFER, LINES, STATIC_DRAW, T
 use nalgebra_glm::{identity, look_at, quat_to_mat4, scale, scaling, translate, translation, DMat4, DQuat, DVec3, Mat4, Vec3, Vec4};
 use sdl3::pixels::Color;
 use std::sync::LazyLock;
+use glow::{Buffer, Program, UniformLocation, VertexArray};
 use num_traits::FloatConst;
 
 static IDENT_MAT_4: LazyLock<Mat4> = LazyLock::new(identity);
@@ -91,10 +92,10 @@ impl Camera3d {
 		self.zoom_level = zoom_level;
 	}
 
-	pub(super) fn draw(&self, obj: &DrawableWorldObj, program: &impl GwrProgram) {
-		obj.prim.apply_vao();
-		program.uniform(&self.proj_mat, &self.view_mat, obj);
-		obj.prim.draw();
+	pub(super) fn draw(&self, gl: &GLHandle, obj: &DrawableWorldObj, program: &impl GwrProgram) {
+		obj.prim.apply_vao(&gl);
+		program.uniform(gl, &self.proj_mat, &self.view_mat, obj);
+		obj.prim.draw(&gl);
 	}
 }
 
@@ -149,32 +150,32 @@ fn look_view_mat(mut pos: Vec3) -> Mat4 {
 pub(crate) trait GwrProgram {
 	fn id(&self) -> u32;
 
-	fn apply(&self);
+	fn apply(&self, gl: &GLHandle);
 
-	fn uniform(&self, proj: &Mat4, view: &Mat4, obj: &DrawableWorldObj);
+	fn uniform(&self, gl: &GLHandle, proj: &Mat4, view: &Mat4, obj: &DrawableWorldObj);
 }
 
 pub(crate) struct GwrGeoProgram {
-	id: u32,
-	model_pos: u32,
-	view_pos: u32,
-	projection_pos: u32,
-	filter_pos: u32,
-	light_dir_pos: u32,
+	id: Program,
+	model_pos: UniformLocation,
+	view_pos: UniformLocation,
+	projection_pos: UniformLocation,
+	filter_pos: UniformLocation,
+	light_dir_pos: UniformLocation,
 }
 
 impl GwrGeoProgram {
-	pub(crate) fn new(vsh: String, fsh: String) -> FerriciaResult<Self> {
-		let id = new_shader_program([
-			compile_shader_from(ShaderType::Vertex, vsh)?,
-			compile_shader_from(ShaderType::Fragment, fsh)?,
+	pub(crate) fn new(gl: &GLHandle, vsh: String, fsh: String) -> FerriciaResult<Self> {
+		let id = gl.new_shader_program([
+			compile_shader_from(gl, ShaderType::Vertex, vsh)?,
+			compile_shader_from(gl, ShaderType::Fragment, fsh)?,
 		]);
 		Ok(Self {
-			model_pos: get_uniform_location(id, "model"),
-			view_pos: get_uniform_location(id, "view"),
-			projection_pos: get_uniform_location(id, "projection"),
-			filter_pos: get_uniform_location(id, "filter"),
-			light_dir_pos: get_uniform_location(id, "lightDir"),
+			model_pos: gl.get_uniform_location(id, "model"),
+			view_pos: gl.get_uniform_location(id, "view"),
+			projection_pos: gl.get_uniform_location(id, "projection"),
+			filter_pos: gl.get_uniform_location(id, "filter"),
+			light_dir_pos: gl.get_uniform_location(id, "lightDir"),
 			id,
 		})
 	}
@@ -182,20 +183,20 @@ impl GwrGeoProgram {
 
 impl GwrProgram for GwrGeoProgram {
 	fn id(&self) -> u32 {
-		self.id
+		self.id.0.get()
 	}
 
 	#[inline]
-	fn apply(&self) {
-		use_program(self.id);
+	fn apply(&self, gl: &GLHandle) {
+		gl.use_program(self.id);
 	}
 
-	fn uniform(&self, proj: &Mat4, view: &Mat4, obj: &DrawableWorldObj) {
-		use_uniform_mat_4(self.projection_pos, proj);
-		use_uniform_mat_4(self.view_pos, view);
-		use_uniform_mat_4(self.model_pos, &obj.model);
-		use_uniform_mat_4(self.filter_pos, &IDENT_MAT_4);
-		use_uniform_vec_3(self.light_dir_pos, &LIGHT_DIR);
+	fn uniform(&self, gl: &GLHandle, proj: &Mat4, view: &Mat4, obj: &DrawableWorldObj) {
+		gl.use_uniform_mat_4(&self.projection_pos, proj);
+		gl.use_uniform_mat_4(&self.view_pos, view);
+		gl.use_uniform_mat_4(&self.model_pos, &obj.model);
+		gl.use_uniform_mat_4(&self.filter_pos, &IDENT_MAT_4);
+		gl.use_uniform_vec_3(&self.light_dir_pos, &LIGHT_DIR);
 	}
 }
 
@@ -231,40 +232,40 @@ impl DrawableWorldObj {
 
 /// Linear Geom with only two points and one color. This uses `LINES`.
 pub(crate) struct SimpleLine3dGeom {
-	vao: u32,
-	vbo: u32,
+	vao: VertexArray,
+	vbo: Buffer,
 	color: Color,
 }
 
 impl SimpleLine3dGeom {
 	const NUM_VERTICES: u32 = 2;
-	pub(crate) fn new(points: [Vec3; 2], color: Color) -> Self {
-		let vao = with_new_vert_arr();
-		let vbo = gen_buf_obj();
+	pub(crate) fn new(gl: &GLHandle, points: [Vec3; 2], color: Color) -> Self {
+		let vao = gl.with_new_vert_arr();
+		let vbo = gl.gen_buf_obj();
 		let vertices = [
 			points[0].x, points[0].y, points[0].z,
 			points[1].x, points[1].y, points[1].z,
 		];
-		buf_obj_with_data(ARRAY_BUFFER, vbo, &vertices, DYNAMIC_DRAW);
-		vert_attr_arr(0, 3, NumType::Float, 3, 0); // Position
+		gl.buf_obj_with_data(ARRAY_BUFFER, vbo, &vertices, DYNAMIC_DRAW);
+		gl.vert_attr_arr(0, 3, NumType::Float, 3, 0); // Position
 		Self { vao, vbo, color } // Note: Binding to the VAO remains
 	}
 }
 
 impl RenderPrimitive for SimpleLine3dGeom {
 	fn vao(&self) -> u32 {
-		self.vao
+		self.vao.0.get()
 	}
 
-	fn draw(&self) {
-		vert_attr(1, VertexAttrVariant::Float3(0., 0., 0.));
-		vert_attr(2, VertexAttrVariant::UbyteNorm4.call(self.color.rgba())); // Color
-		draw_arrays(LINES, Self::NUM_VERTICES);
+	fn draw(&self, gl: &GLHandle) {
+		gl.vert_attr(1, VertexAttrVariant::Float3(0., 0., 0.));
+		gl.vert_attr(2, VertexAttrVariant::UbyteNorm4.call(self.color.rgba())); // Color
+		gl.draw_arrays(LINES, Self::NUM_VERTICES);
 	}
 
-	unsafe fn set_pos_f32(&self, vec: &[f32]) {
+	unsafe fn set_pos_f32(&self, gl: &GLHandle, vec: &[f32]) {
 		assert_eq!(vec.len(), 3 * Self::NUM_VERTICES as usize);
-		update_buf_obj(ARRAY_BUFFER, self.vbo, 0, vec);
+		gl.update_buf_obj(ARRAY_BUFFER, self.vbo, 0, vec);
 	}
 
 	unsafe fn set_pos_f64(&self, _vec: &[f64]) {
@@ -275,9 +276,9 @@ impl RenderPrimitive for SimpleLine3dGeom {
 impl Geom for SimpleLine3dGeom {}
 
 pub(crate) struct SimpleQuad3dGeom {
-	vao: u32,
-	vbo: u32,
-	ebo: u32,
+	vao: VertexArray,
+	vbo: Buffer,
+	ebo: Buffer,
 	color: Color,
 }
 
@@ -289,31 +290,31 @@ impl SimpleQuad3dGeom {
 
 	const NUM_ELEMENTS: u32 = 6;
 
-	pub(crate) fn new(points: [Vec3; 4], color: Color) -> Self {
-		let vao = with_new_vert_arr();
-		let [vbo, ebo] = gen_buf_objs();
+	pub(crate) fn new(gl: &GLHandle, points: [Vec3; 4], color: Color) -> Self {
+		let vao = gl.with_new_vert_arr();
+		let [vbo, ebo] = gl.gen_buf_objs();
 		let vertices = points.iter().flat_map(|e| e.as_slice()).cloned().collect::<Vec<_>>();
-		buf_obj_with_data(ARRAY_BUFFER, vbo, vertices.as_slice(), DYNAMIC_DRAW);
-		buf_obj_with_data(ELEMENT_ARRAY_BUFFER, ebo, &Self::INDICES, STATIC_DRAW);
-		vert_attr_arr(0, 3, NumType::Float, 3, 0); // Position
+		gl.buf_obj_with_data(ARRAY_BUFFER, vbo, vertices.as_slice(), DYNAMIC_DRAW);
+		gl.buf_obj_with_data(ELEMENT_ARRAY_BUFFER, ebo, &Self::INDICES, STATIC_DRAW);
+		gl.vert_attr_arr(0, 3, NumType::Float, 3, 0); // Position
 		Self { vao, vbo, ebo, color } // Note: Binding to the VAO remains
 	}
 }
 
 impl RenderPrimitive for SimpleQuad3dGeom {
 	fn vao(&self) -> u32 {
-		self.vao
+		self.vao.0.get()
 	}
 
-	fn draw(&self) {
-		vert_attr(1, VertexAttrVariant::Float3(0., 0., 0.));
-		vert_attr(2, VertexAttrVariant::UbyteNorm4.call(self.color.rgba())); // Color
-		draw_elements(TRIANGLES, Self::NUM_ELEMENTS);
+	fn draw(&self, gl: &GLHandle) {
+		gl.vert_attr(1, VertexAttrVariant::Float3(0., 0., 0.));
+		gl.vert_attr(2, VertexAttrVariant::UbyteNorm4.call(self.color.rgba())); // Color
+		gl.draw_elements(TRIANGLES, Self::NUM_ELEMENTS);
 	}
 
-	unsafe fn set_pos_f32(&self, vec: &[f32]) {
+	unsafe fn set_pos_f32(&self, gl: &GLHandle, vec: &[f32]) {
 		assert_eq!(vec.len(), 12);
-		update_buf_obj(ARRAY_BUFFER, self.vbo, 0, vec);
+		gl.update_buf_obj(ARRAY_BUFFER, self.vbo, 0, vec);
 	}
 
 	unsafe fn set_pos_f64(&self, _vec: &[f64]) {
@@ -355,15 +356,15 @@ pub(crate) struct SimpleMesh3dGeom {
 }
 
 impl SimpleMesh3dGeom {
-	pub(crate) fn new_cube(width: f32, color: Color) -> Self {
+	pub(crate) fn new_cube(gl: &GLHandle, width: f32, color: Color) -> Self {
 		// Has to be centered for Rotation matrix to work correctly, if correct.
 		let mesh = Mesh::cube(width, None).translate(-width / 2.0, -width / 2.0, -width / 2.0);
-		Self::new_mesh_centered(mesh, color)
+		Self::new_mesh_centered(gl, mesh, color)
 	}
 
-	fn new_mesh_centered(mesh: Mesh<()>, color: Color) -> Self {
-		let vao = with_new_vert_arr();
-		let [vbo, ebo] = gen_buf_objs();
+	fn new_mesh_centered(gl: &GLHandle, mesh: Mesh<()>, color: Color) -> Self {
+		let vao = gl.with_new_vert_arr();
+		let [vbo, ebo] = gl.gen_buf_objs();
 		// Refers to Mesh::get_vertices_and_indices
 		let tri_csg = mesh.triangulate();
 		let vertices = tri_csg
@@ -386,16 +387,16 @@ impl SimpleMesh3dGeom {
 				[offset, offset + 1, offset + 2]
 			})
 			.collect::<Vec<_>>();
-		buf_obj_with_data(ARRAY_BUFFER, vbo, vertices.as_slice(), DYNAMIC_DRAW);
-		buf_obj_with_data(ELEMENT_ARRAY_BUFFER, ebo, indices.as_slice(), STATIC_DRAW);
-		vert_attr_arr(0, 3, NumType::Float, 6, 0);
-		vert_attr_arr(1, 3, NumType::Float, 6, 3);
+		gl.buf_obj_with_data(ARRAY_BUFFER, vbo, vertices.as_slice(), DYNAMIC_DRAW);
+		gl.buf_obj_with_data(ELEMENT_ARRAY_BUFFER, ebo, indices.as_slice(), STATIC_DRAW);
+		gl.vert_attr_arr(0, 3, NumType::Float, 6, 0);
+		gl.vert_attr_arr(1, 3, NumType::Float, 6, 3);
 		Self { vao, vbo, ebo, num_vertices: (vertices.len() / 2) as u32, mesh, color }
 	}
 
-	pub(crate) fn new_sphere(radius: f32, color: Color) -> Self {
+	pub(crate) fn new_sphere(gl: &GLHandle, radius: f32, color: Color) -> Self {
 		let mesh = Mesh::sphere(radius, 20, 10, None);
-		Self::new_mesh_centered(mesh, color)
+		Self::new_mesh_centered(gl, mesh, color)
 	}
 }
 
@@ -404,12 +405,12 @@ impl RenderPrimitive for SimpleMesh3dGeom {
 		self.vao
 	}
 
-	fn draw(&self) {
-		vert_attr(2, VertexAttrVariant::UbyteNorm4.call(self.color.rgba())); // Color
-		draw_elements(TRIANGLES, self.num_vertices);
+	fn draw(&self, gl: &GLHandle) {
+		gl.vert_attr(2, VertexAttrVariant::UbyteNorm4.call(self.color.rgba())); // Color
+		gl.draw_elements(TRIANGLES, self.num_vertices);
 	}
 
-	unsafe fn set_pos_f32(&self, _vec: &[f32]) {
+	unsafe fn set_pos_f32(&self, gl: &GLHandle, vec: &[f32]) {
 		unimplemented!("Unsupported")
 	}
 

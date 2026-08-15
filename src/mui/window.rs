@@ -5,7 +5,6 @@
 use crate::mui::ogl::GLHandle;
 use crate::mui::SdlHandle;
 use crate::{FerriciaError, FerriciaResult};
-use gl::COLOR_BUFFER_BIT;
 use sdl3::video::{SwapInterval, Window, WindowBuildError};
 use std::ptr::null;
 use std::rc::Rc;
@@ -26,7 +25,7 @@ impl From<WindowBuildError> for FerriciaError {
 pub(crate) struct WindowHandle {
 	window: Window,
 	/// Must be internally immutable upon initialization.
-	#[get = "pub(super)"]
+	#[get = "pub(crate)"]
 	gl_handle: Arc<GLHandle>,
 }
 
@@ -35,6 +34,8 @@ const MIN_HEIGHT: u32 = 480;
 
 impl WindowHandle {
 	pub(crate) fn new(sdl_handle: &SdlHandle) -> FerriciaResult<Self> {
+		sdl_handle.video.gl_attr().set_multisample_buffers(1);
+		sdl_handle.video.gl_attr().set_multisample_samples(4);
 		let mut window = sdl_handle.video.window("TerraModulus", MIN_WIDTH, MIN_HEIGHT)
 			.opengl()
 			.hidden()
@@ -46,8 +47,8 @@ impl WindowHandle {
 		sdl_handle.video.text_input().stop(&window);
 		let gl_context = window.gl_create_context()?;
 		window.gl_make_current(&gl_context)?;
-		gl::load_with(|s| sdl_handle.video.gl_get_proc_address(s).map_or(null::<fn()>(), |f| f as *const _) as *const _);
-		let gl_handle = GLHandle::new(gl_context)?;
+		let gl = unsafe { glow::Context::from_loader_function(|s| sdl_handle.video.gl_get_proc_address(s).map_or(null::<fn()>(), |f| f as *const _) as *const _) };
+		let gl_handle = GLHandle::new(gl_context, gl)?;
 		gl_handle.gl_resize_viewport(MIN_WIDTH, MIN_HEIGHT);
 		Ok(Self {
 			gl_handle: Arc::new(gl_handle),
@@ -79,9 +80,5 @@ impl WindowHandle {
 
 	fn window_id(&self) -> u32 {
 		self.window.id()
-	}
-
-	pub(crate) fn full_gl_version(&self) -> &str {
-		self.gl_handle.full_gl_version()
 	}
 }

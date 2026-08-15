@@ -15,20 +15,14 @@ pub mod phy;
 #[cfg(feature = "client")]
 use crate::mui::{
 	rendering::{
-		clear_canvas,
-		set_clear_color,
 		AlphaFilter,
 		CanvasHandle,
 		DrawableSet,
-		FullScaling,
 		GeoProgram,
 		PrimColorFilter,
 		PrimModelTransform,
-		ScalingCenteredTranslateParam,
 		SimpleLineGeom,
 		SimpleRectGeom,
-		SimpleTranslation,
-		SmartScaling,
 		SpriteMesh,
 		TexProgram,
 	},
@@ -787,44 +781,45 @@ jni_ferricia! {
 jni_ferricia! {
 	client:Mui.loadImageToCanvas(mut env: JNIEnv, class: JClass, handle: jlong, data: jbyteArray) -> jint {
 		jni_get_arr!(arr = JByteArray; data, env);
-		jni_ref_ptr::<CanvasHandle>(handle).load_image(cast_slice(&*arr)) as jint
+		jni_ref_ptr::<CanvasHandle>(handle).load_image(cast_slice(&*arr)).0.get() as jint
 	}
 }
 
 jni_ferricia! {
-	client:Mui.clearCanvas(mut env: JNIEnv, class: JClass) {
-		clear_canvas()
+	client:Mui.clearCanvas(mut env: JNIEnv, class: JClass, handle: jlong) {
+		jni_ref_ptr::<WindowHandle>(handle).gl_handle().clear_canvas()
 	}
 }
 
 jni_ferricia! {
-	client:Mui.setCanvasClearColor(mut env: JNIEnv, class: JClass, r: jfloat, g: jfloat, b: jfloat, a: jfloat) {
-		set_clear_color((r, g, b, a));
+	client:Mui.setCanvasClearColor(mut env: JNIEnv, class: JClass, handle: jlong, r: jfloat, g: jfloat, b: jfloat, a: jfloat) {
+		jni_ref_ptr::<WindowHandle>(handle).gl_handle().set_clear_color((r, g, b, a));
 	}
 }
 
 jni_ferricia! {
-	client:Mui.geoShaders(mut env: JNIEnv, class: JClass, vsh: JString, fsh: JString) -> jlong {
-		jni_res_to_ptr(GeoProgram::new(jni_get_string(&mut env, vsh), jni_get_string(&mut env, fsh)), &mut env)
+	client:Mui.geoShaders(mut env: JNIEnv, class: JClass, handle: jlong, vsh: JString, fsh: JString) -> jlong {
+		jni_res_to_ptr(GeoProgram::new(jni_ref_ptr::<WindowHandle>(handle).gl_handle(), jni_get_string(&mut env, vsh), jni_get_string(&mut env, fsh)), &mut env)
 	}
 }
 
 jni_ferricia! {
-	client:Mui.texShaders(mut env: JNIEnv, class: JClass, vsh: JString, fsh: JString) -> jlong {
-		jni_res_to_ptr(TexProgram::new(jni_get_string(&mut env, vsh), jni_get_string(&mut env, fsh)), &mut env)
+	client:Mui.texShaders(mut env: JNIEnv, class: JClass, handle: jlong, vsh: JString, fsh: JString) -> jlong {
+		jni_res_to_ptr(TexProgram::new(jni_ref_ptr::<WindowHandle>(handle).gl_handle(), jni_get_string(&mut env, vsh), jni_get_string(&mut env, fsh)), &mut env)
 	}
 }
 
 jni_ferricia! {
-	client:Gwr.geoShaders(mut env: JNIEnv, class: JClass, vsh: JString, fsh: JString) -> jlong {
-		jni_res_to_ptr(GwrGeoProgram::new(jni_get_string(&mut env, vsh), jni_get_string(&mut env, fsh)), &mut env)
+	client:Gwr.geoShaders(mut env: JNIEnv, class: JClass, handle: jlong, vsh: JString, fsh: JString) -> jlong {
+		jni_res_to_ptr(GwrGeoProgram::new(jni_ref_ptr::<WindowHandle>(handle).gl_handle(), jni_get_string(&mut env, vsh), jni_get_string(&mut env, fsh)), &mut env)
 	}
 }
 
 jni_ferricia! {
-	client:Mui.newSimpleLineGeom(mut env: JNIEnv, class: JClass, data: jintArray) -> jlong {
+	client:Mui.newSimpleLineGeom(mut env: JNIEnv, class: JClass, handle: jlong, data: jintArray) -> jlong {
 		jni_get_arr!(arr = JIntArray; data, env);
 		jni_to_ptr(DrawableSet::new(SimpleLineGeom::new(
+			jni_ref_ptr::<WindowHandle>(handle).gl_handle(),
 			[(arr[0] as f32, arr[1] as f32), (arr[2] as f32, arr[3] as f32)],
 			Color::RGBA(arr[4] as u8, arr[5] as u8, arr[6] as u8, arr[7] as u8),
 		)))
@@ -832,9 +827,10 @@ jni_ferricia! {
 }
 
 jni_ferricia! {
-	client:Mui.newSimpleRectGeom(mut env: JNIEnv, class: JClass, data: jintArray) -> jlong {
+	client:Mui.newSimpleRectGeom(mut env: JNIEnv, class: JClass, handle: jlong, data: jintArray) -> jlong {
 		jni_get_arr!(arr = JIntArray; data, env);
 		jni_to_ptr(DrawableSet::new(SimpleRectGeom::new(
+			jni_ref_ptr::<WindowHandle>(handle).gl_handle(),
 			[arr[0] as f32, arr[1] as f32, arr[2] as f32, arr[3] as f32],
 			Color::RGBA(arr[4] as u8, arr[5] as u8, arr[6] as u8, arr[7] as u8),
 		)))
@@ -842,16 +838,16 @@ jni_ferricia! {
 }
 
 jni_ferricia! {
-	client:Mui.newSpriteMesh(mut env: JNIEnv, class: JClass, data: jintArray) -> jlong {
+	client:Mui.newSpriteMesh(mut env: JNIEnv, class: JClass, handle: jlong, data: jintArray) -> jlong {
 		jni_get_arr!(arr = JIntArray; data, env);
-		jni_to_ptr(DrawableSet::new(SpriteMesh::new([arr[0] as _, arr[1] as _, arr[2] as _, arr[3] as _])))
+		jni_to_ptr(DrawableSet::new(SpriteMesh::new(jni_ref_ptr::<WindowHandle>(handle).gl_handle(), [arr[0] as _, arr[1] as _, arr[2] as _, arr[3] as _])))
 	}
 }
 
 jni_ferricia! {
-	client:Mui.setGeomPos(mut env: JNIEnv, class: JClass, handle: jlong, data: jfloatArray) {
+	client:Mui.setGeomPos(mut env: JNIEnv, class: JClass, gl_handle: jlong, handle: jlong, data: jfloatArray) {
 		jni_get_arr!(arr = JFloatArray; data, env);
-		unsafe { jni_ref_ptr::<DrawableSet>(handle).set_prim_pos(&arr) }
+		unsafe { jni_ref_ptr::<DrawableSet>(handle).set_prim_pos(jni_ref_ptr::<WindowHandle>(gl_handle).gl_handle(), &arr) }
 	}
 }
 
@@ -866,33 +862,6 @@ jni_ferricia! {
 	client:Mui.updateGeneralTransform(mut env: JNIEnv, class: JClass, model_handle: jlong, data: jdoubleArray) {
 		jni_get_arr!(arr = JDoubleArray; data, env);
 		jni_ref_ptr::<GeneralTransform>(model_handle).update(DVec3::new(arr[0], arr[1], 1.), arr[2], DVec3::new(arr[3], arr[4], 0.))
-	}
-}
-
-jni_ferricia! {
-	client:Mui.modelSmartScaling(mut env: JNIEnv, class: JClass, data: jintArray) -> jlongArray {
-		jni_get_arr!(arr = JIntArray; data, env);
-		jni_to_destructed_ptr!(SmartScaling::new((arr[0] as _, arr[1] as _), match arr[2] {
-			0 => None,
-			1 => Some((ScalingCenteredTranslateParam::X, (arr[3] as _, arr[4] as _))),
-			2 => Some((ScalingCenteredTranslateParam::Y, (arr[3] as _, arr[4] as _))),
-			3 => Some((ScalingCenteredTranslateParam::Both, (arr[3] as _, arr[4] as _))),
-			_ => panic!("Invalid Smart Scaling parameter"),
-		}), dyn PrimModelTransform, env);
-	}
-}
-
-jni_ferricia! {
-	client:Mui.modelFullScaling(mut env: JNIEnv, class: JClass, data: jintArray) -> jlongArray {
-		jni_get_arr!(arr = JIntArray; data, env);
-		jni_to_destructed_ptr!(FullScaling::new((arr[0] as _, arr[1] as _)), dyn PrimModelTransform, env);
-	}
-}
-
-jni_ferricia! {
-	client:Mui.modelSimpleTranslation(mut env: JNIEnv, class: JClass, data: jfloatArray) -> jlongArray {
-		jni_get_arr!(arr = JFloatArray; data, env);
-		jni_to_destructed_ptr!(SimpleTranslation::new(arr[0], arr[1]), dyn PrimModelTransform, env);
 	}
 }
 
@@ -998,16 +967,16 @@ jni_ferricia! {
 }
 
 jni_ferricia! {
-	client:Gwr.newMeshGeomCube(mut env: JNIEnv, class: JClass, width: jfloat, data: jintArray) -> jlong {
+	client:Gwr.newMeshGeomCube(mut env: JNIEnv, class: JClass, handle: jlong, width: jfloat, data: jintArray) -> jlong {
 		jni_get_arr!(arr = JIntArray; data, env);
-		jni_to_ptr(DrawableWorldObj::new(SimpleMesh3dGeom::new_cube(width, Color::RGBA(arr[0] as _, arr[1] as _, arr[2] as _, arr[3] as _))))
+		jni_to_ptr(DrawableWorldObj::new(SimpleMesh3dGeom::new_cube(jni_ref_ptr::<WindowHandle>(handle).gl_handle(), width, Color::RGBA(arr[0] as _, arr[1] as _, arr[2] as _, arr[3] as _))))
 	}
 }
 
 jni_ferricia! {
-	client:Gwr.newMeshGeomSphere(mut env: JNIEnv, class: JClass, radius: jfloat, data: jintArray) -> jlong {
+	client:Gwr.newMeshGeomSphere(mut env: JNIEnv, class: JClass, handle: jlong, radius: jfloat, data: jintArray) -> jlong {
 		jni_get_arr!(arr = JIntArray; data, env);
-		jni_to_ptr(DrawableWorldObj::new(SimpleMesh3dGeom::new_sphere(radius, Color::RGBA(arr[0] as _, arr[1] as _, arr[2] as _, arr[3] as _))))
+		jni_to_ptr(DrawableWorldObj::new(SimpleMesh3dGeom::new_sphere(jni_ref_ptr::<WindowHandle>(handle).gl_handle(), radius, Color::RGBA(arr[0] as _, arr[1] as _, arr[2] as _, arr[3] as _))))
 	}
 }
 
@@ -1026,12 +995,14 @@ jni_ferricia! {
 	client:Gwr.drawGwrObj(
 		mut env: JNIEnv,
 		class: JClass,
+		handle: jlong,
 		canvas_handle: jlong,
 		camera_handle: jlong,
 		obj_handle: jlong,
 		program_handle: jlong,
 	) {
 		jni_ref_ptr::<CanvasHandle>(canvas_handle).draw_gwr(
+			jni_ref_ptr::<WindowHandle>(handle).gl_handle(),
 			jni_ref_ptr::<Camera3d>(camera_handle),
 			jni_ref_ptr::<DrawableWorldObj>(obj_handle),
 			jni_ref_ptr::<GwrGeoProgram>(program_handle),

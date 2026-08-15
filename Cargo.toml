@@ -24,7 +24,8 @@ libflac-sys = "0.3"
 sdl3 = { version = "0.18.0", features = ["build-from-source", "build-from-source-unix-console"] }
 ode-sys = { path = "ode" }
 openal-soft-sys = { path = "openal-soft" }
-gl = "0.14.0"
+gl = "0.14.0" # missing functions from glow are complemented by gl
+glow = "0.18.0"
 opencl3 = "0.12.0"
 icu = "2.0.0"
 serde_json = "1.0"
@@ -54,14 +55,19 @@ by_address = "1.2.1"
 array-macro = "2.1.8"
 csgrs = { version =  "0.20.1", default-features = false, features = ["f32", "delaunay", "offset"] }
 bytemuck = "1.25.0"
+#nvtt_rs = "0.11.0"
 
 [target.'cfg(windows)'.dev-dependencies]
 criterion = { version = "0.8.2", features = ["html_reports"] }
+glutin_wgl_sys = "0.6.1"
 
 [target.'cfg(unix)'.dev-dependencies]
 # pprof does not support >=0.6
 criterion = { version = "0.5.1", features = ["html_reports"] }
 pprof = { version = "0.15.0", features = ["criterion", "flamegraph"] }
+
+[target.'cfg(all(unix, not(target_os = "macos")))'.dev-dependencies]
+glutin_glx_sys = "0.6.1"
 
 [[bench]]
 name = "collisions"
