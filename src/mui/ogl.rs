@@ -34,6 +34,7 @@ use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::slice;
 use std::sync::LazyLock;
+use bytemuck::Pod;
 
 const VER_2_0: Version = Version::new(2, 0, 0);
 const VER_3_0: Version = Version::new(3, 0, 0);
@@ -41,7 +42,7 @@ const VER_3_1: Version = Version::new(3, 1, 0);
 
 /// As long as this is never mutated after creation, this **should** be *thread-safe*.
 #[derive(Getters)]
-pub(super) struct GLHandle {
+pub(crate) struct GLHandle {
 	gl: Context,
 	gl_context: GLContext,
 	#[get = "pub"]
@@ -74,7 +75,7 @@ impl GLHandle {
 		let full_glsl_version = unsafe { gl.get_parameter_string(SHADING_LANGUAGE_VERSION) };
 		let gl_version = gl.version();
 		if gl_version.is_embedded {
-			return Err(format!("OpenGL ES is not supported; found: {}", gl_version))
+			return Err(format!("OpenGL ES is not supported; found: {:?}", gl_version))
 		}
 		let handle = Self {
 			gl_context,
@@ -82,8 +83,8 @@ impl GLHandle {
 			renderer: unsafe { gl.get_parameter_string(RENDERER) },
 			platform_extensions: get_platform_extensions(),
 			full_gl_version: unsafe { gl.get_parameter_string(VERSION) },
-			gl,
 			gl_version: Version::new(gl_version.major as _, gl_version.minor as _, gl_version.revision.unwrap_or(0) as _),
+			gl,
 			glsl_version: parse_version(&full_glsl_version)?,
 			features: HashSet::new(),
 		};
@@ -281,7 +282,7 @@ impl GLHandle {
 				0,
 				tex_src.tex_fmt.into_gl(),
 				tex_src.tex_typ.into_gl(),
-				PixelUnpackData::Slice(Some(tex_src.data)),
+				PixelUnpackData::Slice(Some(&tex_src.data)),
 			);
 			self.gl.generate_mipmap(TEXTURE_2D);
 			tex
@@ -289,7 +290,7 @@ impl GLHandle {
 	}
 }
 
-fn slice_to_u8_slice<T>(data: &[T]) -> &[u8] {
+fn slice_to_u8_slice<T: bytemuck::Pod>(data: &[T]) -> &[u8] {
 	bytemuck::cast_slice(data)
 	// unsafe {
 	// 	slice::from_raw_parts(
@@ -310,7 +311,10 @@ static ES_VERSION_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^OpenGL
 /// Only parses the first two parts (major, minor) of the version string.
 fn parse_version(version_str: &str) -> Result<Version, String> {
 	match VERSION_REGEX.captures(version_str) {
-		Some(caps) => Ok(Version::new(caps[1].parse()?, caps[2].parse()?, 0)),
+		Some(caps) => Ok(Version::new(
+			caps[1].parse().map_err(|e| format!("{e:?}"))?,
+			caps[2].parse().map_err(|e| format!("{e:?}"))?,
+			0)),
 		None => Err({
 			if !ES_VERSION_REGEX.is_match(version_str) { panic!("invalid version string: {}", version_str); }
 			format!("OpenGL ES is not supported; found: {}", version_str)
@@ -318,16 +322,20 @@ fn parse_version(version_str: &str) -> Result<Version, String> {
 	}
 }
 
-pub(super) struct TexSrc<'a> {
+// pub(super) struct TexSrc<'a> {
+pub(super) struct TexSrc {
 	width: u32,
 	height: u32,
-	data: &'a [u8],
+	// data: &'a [u8],
+	data: Box<[u8]>,
 	tex_fmt: SrcTexFmt,
 	tex_typ: SrcTexTyp,
 }
 
-impl TexSrc<'_> {
-	pub(super) fn new(width: u32, height: u32, data: &[u8], tex_fmt: SrcTexFmt, tex_typ: SrcTexTyp) -> Self {
+// impl<'a> TexSrc<'a> {
+impl TexSrc {
+	// pub(super) fn new(width: u32, height: u32, data: &'a [u8], tex_fmt: SrcTexFmt, tex_typ: SrcTexTyp) -> Self {
+	pub(super) fn new(width: u32, height: u32, data: Box<[u8]>, tex_fmt: SrcTexFmt, tex_typ: SrcTexTyp) -> Self {
 		Self {
 			width,
 			height,
@@ -444,9 +452,9 @@ pub(super) enum CmpItnTexFmt {
 	SrgbUaS3tc,
 }
 
-pub(super) trait Number : Num + Bounded {}
+pub(super) trait Number : Num + Bounded + Pod {}
 
-impl<T: Num + Bounded> Number for T {}
+impl<T: Num + Bounded + Pod> Number for T {}
 
 pub(super) enum NumType {
 	Byte,

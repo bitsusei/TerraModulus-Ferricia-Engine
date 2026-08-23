@@ -232,6 +232,7 @@ impl DrawableWorldObj {
 
 /// Linear Geom with only two points and one color. This uses `LINES`.
 pub(crate) struct SimpleLine3dGeom {
+	gl: &'static GLHandle,
 	vao: VertexArray,
 	vbo: Buffer,
 	color: Color,
@@ -239,7 +240,7 @@ pub(crate) struct SimpleLine3dGeom {
 
 impl SimpleLine3dGeom {
 	const NUM_VERTICES: u32 = 2;
-	pub(crate) fn new(gl: &GLHandle, points: [Vec3; 2], color: Color) -> Self {
+	pub(crate) fn new(gl: &'static GLHandle, points: [Vec3; 2], color: Color) -> Self {
 		let vao = gl.with_new_vert_arr();
 		let vbo = gl.gen_buf_obj();
 		let vertices = [
@@ -248,7 +249,7 @@ impl SimpleLine3dGeom {
 		];
 		gl.buf_obj_with_data(ARRAY_BUFFER, vbo, &vertices, DYNAMIC_DRAW);
 		gl.vert_attr_arr(0, 3, NumType::Float, 3, 0); // Position
-		Self { vao, vbo, color } // Note: Binding to the VAO remains
+		Self { gl, vao, vbo, color } // Note: Binding to the VAO remains
 	}
 }
 
@@ -263,9 +264,9 @@ impl RenderPrimitive for SimpleLine3dGeom {
 		gl.draw_arrays(LINES, Self::NUM_VERTICES);
 	}
 
-	unsafe fn set_pos_f32(&self, gl: &GLHandle, vec: &[f32]) {
+	unsafe fn set_pos_f32(&self, vec: &[f32]) {
 		assert_eq!(vec.len(), 3 * Self::NUM_VERTICES as usize);
-		gl.update_buf_obj(ARRAY_BUFFER, self.vbo, 0, vec);
+		self.gl.update_buf_obj(ARRAY_BUFFER, self.vbo, 0, vec);
 	}
 
 	unsafe fn set_pos_f64(&self, _vec: &[f64]) {
@@ -276,6 +277,7 @@ impl RenderPrimitive for SimpleLine3dGeom {
 impl Geom for SimpleLine3dGeom {}
 
 pub(crate) struct SimpleQuad3dGeom {
+	gl: &'static GLHandle,
 	vao: VertexArray,
 	vbo: Buffer,
 	ebo: Buffer,
@@ -290,14 +292,14 @@ impl SimpleQuad3dGeom {
 
 	const NUM_ELEMENTS: u32 = 6;
 
-	pub(crate) fn new(gl: &GLHandle, points: [Vec3; 4], color: Color) -> Self {
+	pub(crate) fn new(gl: &'static GLHandle, points: [Vec3; 4], color: Color) -> Self {
 		let vao = gl.with_new_vert_arr();
 		let [vbo, ebo] = gl.gen_buf_objs();
 		let vertices = points.iter().flat_map(|e| e.as_slice()).cloned().collect::<Vec<_>>();
 		gl.buf_obj_with_data(ARRAY_BUFFER, vbo, vertices.as_slice(), DYNAMIC_DRAW);
 		gl.buf_obj_with_data(ELEMENT_ARRAY_BUFFER, ebo, &Self::INDICES, STATIC_DRAW);
 		gl.vert_attr_arr(0, 3, NumType::Float, 3, 0); // Position
-		Self { vao, vbo, ebo, color } // Note: Binding to the VAO remains
+		Self { gl, vao, vbo, ebo, color } // Note: Binding to the VAO remains
 	}
 }
 
@@ -312,9 +314,9 @@ impl RenderPrimitive for SimpleQuad3dGeom {
 		gl.draw_elements(TRIANGLES, Self::NUM_ELEMENTS);
 	}
 
-	unsafe fn set_pos_f32(&self, gl: &GLHandle, vec: &[f32]) {
+	unsafe fn set_pos_f32(&self, vec: &[f32]) {
 		assert_eq!(vec.len(), 12);
-		gl.update_buf_obj(ARRAY_BUFFER, self.vbo, 0, vec);
+		self.gl.update_buf_obj(ARRAY_BUFFER, self.vbo, 0, vec);
 	}
 
 	unsafe fn set_pos_f64(&self, _vec: &[f64]) {
@@ -325,9 +327,9 @@ impl RenderPrimitive for SimpleQuad3dGeom {
 impl Geom for SimpleQuad3dGeom {}
 
 pub(crate) struct SimpleBox3dGeom {
-	vao: u32,
-	vbo: u32,
-	ebo: u32,
+	vao: VertexArray,
+	vbo: Buffer,
+	ebo: Buffer,
 	color: Color,
 }
 
@@ -347,9 +349,9 @@ impl SimpleBox3dGeom {
 
 /// Utilizing CSG's [Mesh]
 pub(crate) struct SimpleMesh3dGeom {
-	vao: u32,
-	vbo: u32,
-	ebo: u32,
+	vao: VertexArray,
+	vbo: Buffer,
+	ebo: Buffer,
 	mesh: Mesh<()>,
 	num_vertices: u32,
 	color: Color,
@@ -402,7 +404,7 @@ impl SimpleMesh3dGeom {
 
 impl RenderPrimitive for SimpleMesh3dGeom {
 	fn vao(&self) -> u32 {
-		self.vao
+		self.vao.0.get()
 	}
 
 	fn draw(&self, gl: &GLHandle) {
@@ -410,7 +412,7 @@ impl RenderPrimitive for SimpleMesh3dGeom {
 		gl.draw_elements(TRIANGLES, self.num_vertices);
 	}
 
-	unsafe fn set_pos_f32(&self, gl: &GLHandle, vec: &[f32]) {
+	unsafe fn set_pos_f32(&self, vec: &[f32]) {
 		unimplemented!("Unsupported")
 	}
 

@@ -290,9 +290,10 @@ impl OdeMass {
 	pub fn new() -> Self {
 		Self {
 			data: dMass { // Literally `dMassSetZero`
-				mass: 0.0,
-				c: [0.0; 4],
-				I: [0.0; 12],
+				_address: 0,
+				// mass: 0.0,
+				// c: [0.0; 4],
+				// I: [0.0; 12],
 			}
 		}
 	}

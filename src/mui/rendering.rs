@@ -22,6 +22,7 @@ use std::io::Cursor;
 use std::num::NonZeroU32;
 use std::ptr;
 use std::sync::{Arc, LazyLock};
+use bytemuck::cast_slice_box;
 
 static IDENT_MAT_4: LazyLock<TMat4<f32>> = LazyLock::new(identity);
 
@@ -66,22 +67,22 @@ impl CanvasHandle {
 		// Image coordinates have a difference direction as OpenGL texture coordinates.
 		flip_vertical_in_place(&mut img);
 		fn from_rgb8(img: RgbImage) -> TexSrc {
-			TexSrc::new(img.width(), img.height(), img.as_bytes(), SrcTexFmt::Rgb, SrcTexTyp::UnsignedByte)
+			TexSrc::new(img.width(), img.height(), img.into_raw().into_boxed_slice(), SrcTexFmt::Rgb, SrcTexTyp::UnsignedByte)
 		}
 		fn from_rgba8(img: RgbaImage) -> TexSrc {
-			TexSrc::new(img.width(), img.height(), img.as_bytes(), SrcTexFmt::Rgba, SrcTexTyp::UnsignedByte)
+			TexSrc::new(img.width(), img.height(), img.into_raw().into_boxed_slice(), SrcTexFmt::Rgba, SrcTexTyp::UnsignedByte)
 		}
 		fn from_rgb16(img: ImageBuffer<Rgb<u16>, Vec<u16>>) -> TexSrc {
-			TexSrc::new(img.width(), img.height(), img.as_bytes(), SrcTexFmt::Rgb, SrcTexTyp::UnsignedShort)
+			TexSrc::new(img.width(), img.height(), cast_slice_box(img.into_raw().into_boxed_slice()), SrcTexFmt::Rgb, SrcTexTyp::UnsignedShort)
 		}
 		fn from_rgba16(img: ImageBuffer<Rgba<u16>, Vec<u16>>) -> TexSrc {
-			TexSrc::new(img.width(), img.height(), img.as_bytes(), SrcTexFmt::Rgba, SrcTexTyp::UnsignedShort)
+			TexSrc::new(img.width(), img.height(), cast_slice_box(img.into_raw().into_boxed_slice()), SrcTexFmt::Rgba, SrcTexTyp::UnsignedShort)
 		}
 		fn from_rgb32f(img: Rgb32FImage) -> TexSrc {
-			TexSrc::new(img.width(), img.height(), img.as_bytes(), SrcTexFmt::Rgb, SrcTexTyp::Float)
+			TexSrc::new(img.width(), img.height(), cast_slice_box(img.into_raw().into_boxed_slice()), SrcTexFmt::Rgb, SrcTexTyp::Float)
 		}
 		fn from_rgba32f(img: Rgba32FImage) -> TexSrc {
-			TexSrc::new(img.width(), img.height(), img.as_bytes(), SrcTexFmt::Rgba, SrcTexTyp::Float)
+			TexSrc::new(img.width(), img.height(), cast_slice_box(img.into_raw().into_boxed_slice()), SrcTexFmt::Rgba, SrcTexTyp::Float)
 		}
 		self.gl_handle.new_sprite_texture(match img {
 			DynamicImage::ImageLuma8(_) => from_rgb8(img.into_rgb8()),
@@ -388,8 +389,8 @@ pub(super) trait Geom : RenderPrimitive {
 }
 
 /// Linear Geom with only two points and one color. This uses `LINES`.
-pub(crate) struct SimpleLineGeom<'a> {
-	gl: &'a GLHandle,
+pub(crate) struct SimpleLineGeom {
+	gl: &'static GLHandle,
 	vao: VertexArray,
 	vbo: Buffer,
 	color: Color,
@@ -397,7 +398,7 @@ pub(crate) struct SimpleLineGeom<'a> {
 
 impl SimpleLineGeom {
 	const NUM_VERTICES: u32 = 2;
-	pub(crate) fn new(gl: &GLHandle, points: [(f32, f32); 2], color: Color) -> Self {
+	pub(crate) fn new(gl: &'static GLHandle, points: [(f32, f32); 2], color: Color) -> Self {
 		let vao = gl.with_new_vert_arr();
 		let vbo = gl.gen_buf_obj();
 		let vertices = [
@@ -432,8 +433,8 @@ impl RenderPrimitive for SimpleLineGeom {
 
 impl Geom for SimpleLineGeom {}
 
-pub(crate) struct SimpleRectGeom<'a> {
-	gl: &'a GLHandle,
+pub(crate) struct SimpleRectGeom {
+	gl: &'static GLHandle,
 	vao: VertexArray,
 	vbo: Buffer,
 	ebo: Buffer,
@@ -449,7 +450,7 @@ impl SimpleRectGeom {
 	const NUM_ELEMENTS: u32 = 6;
 
 	/// `[x0, y0, x1, y1]`; (0, 0) as bottom-left
-	pub(crate) fn new(gl: &GLHandle, points: [f32; 4], color: Color) -> Self {
+	pub(crate) fn new(gl: &'static GLHandle, points: [f32; 4], color: Color) -> Self {
 		let vao = gl.with_new_vert_arr();
 		let [vbo, ebo] = gl.gen_buf_objs();
 		let vertices = [
@@ -497,8 +498,8 @@ trait Mesh : RenderPrimitive {
 }
 
 /// Simplest form of a **Mesh**
-pub(crate) struct SpriteMesh<'a> {
-	gl: &'a GLHandle,
+pub(crate) struct SpriteMesh {
+	gl: &'static GLHandle,
 	vao: VertexArray,
 	vbo: Buffer,
 	ebo: Buffer,
@@ -513,7 +514,7 @@ impl SpriteMesh {
 	const NUM_ELEMENTS: u32 = 6;
 
 	/// `[x0, y0, x1, y1]`; (0, 0) as bottom-left
-	pub(crate) fn new(gl: &GLHandle, points: [u32; 4]) -> Self {
+	pub(crate) fn new(gl: &'static GLHandle, points: [u32; 4]) -> Self {
 		let vao = gl.with_new_vert_arr();
 		let [vbo, ebo] = gl.gen_buf_objs();
 		let vertices: [f32; 16] = [

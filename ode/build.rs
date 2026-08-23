@@ -113,6 +113,7 @@ fn main() {
 		.parse_callbacks(Box::new(IgnoreMacros::new()))
 		.allowlist_function("d.*")
 		.clang_arg(format!("-I{}", dst.join("include").to_str().unwrap()))
+		.layout_tests(false)
 		.generate().unwrap();
 
 	let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());

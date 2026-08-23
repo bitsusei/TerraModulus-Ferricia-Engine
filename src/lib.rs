@@ -25,6 +25,7 @@ use crate::mui::{
 		SimpleRectGeom,
 		SpriteMesh,
 		TexProgram,
+		GeneralTransform,
 	},
 	rendering3d::{Camera3d, DrawableWorldObj, GwrGeoProgram, SimpleMesh3dGeom},
 	window::WindowHandle,
@@ -46,7 +47,6 @@ use std::fmt::Display;
 use std::panic::{catch_unwind, take_hook, AssertUnwindSafe};
 use std::ptr::{from_raw_parts, null};
 use bytemuck::cast_slice;
-use crate::mui::rendering::GeneralTransform;
 
 #[derive(From)]
 struct FerriciaError(String);
@@ -332,7 +332,7 @@ jni_ferricia! {
 
 jni_ferricia! {
 	client:Mui.getGLVersion(mut env: JNIEnv, class: JClass, handle: jlong) -> jstring {
-		env.new_string(jni_ref_ptr::<WindowHandle>(handle).full_gl_version())
+		env.new_string(jni_ref_ptr::<WindowHandle>(handle).gl_handle().full_gl_version())
 			.expect("Cannot create Java string")
 			.into_raw()
 	}
