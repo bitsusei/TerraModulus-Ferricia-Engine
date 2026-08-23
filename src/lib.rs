@@ -845,9 +845,9 @@ jni_ferricia! {
 }
 
 jni_ferricia! {
-	client:Mui.setGeomPos(mut env: JNIEnv, class: JClass, gl_handle: jlong, handle: jlong, data: jfloatArray) {
+	client:Mui.setGeomPos(mut env: JNIEnv, class: JClass, handle: jlong, data: jfloatArray) {
 		jni_get_arr!(arr = JFloatArray; data, env);
-		unsafe { jni_ref_ptr::<DrawableSet>(handle).set_prim_pos(jni_ref_ptr::<WindowHandle>(gl_handle).gl_handle(), &arr) }
+		unsafe { jni_ref_ptr::<DrawableSet>(handle).set_prim_pos(&arr) }
 	}
 }
 

@@ -326,8 +326,8 @@ impl<'a> DrawableSet<'a> {
 		unsafe { (self.prim.as_mut() as &mut dyn Any).downcast_unchecked_mut() }
 	}
 
-	pub(crate) unsafe fn set_prim_pos(&self, gl: &GLHandle, pos: &[f32]) {
-		unsafe { self.prim.set_pos_f32(gl, pos) }
+	pub(crate) unsafe fn set_prim_pos(&self, pos: &[f32]) {
+		unsafe { self.prim.set_pos_f32(pos) }
 	}
 
 	pub(crate) fn add_model_transform<'b: 'a>(&mut self, transform: &'b dyn PrimModelTransform) {
@@ -377,7 +377,7 @@ pub(crate) trait RenderPrimitive : Any {
 
 	fn draw(&self, gl: &GLHandle);
 
-	unsafe fn set_pos_f32(&self, gl: &GLHandle, vec: &[f32]);
+	unsafe fn set_pos_f32(&self, vec: &[f32]);
 
 	unsafe fn set_pos_f64(&self, vec: &[f64]);
 }
@@ -388,7 +388,8 @@ pub(super) trait Geom : RenderPrimitive {
 }
 
 /// Linear Geom with only two points and one color. This uses `LINES`.
-pub(crate) struct SimpleLineGeom {
+pub(crate) struct SimpleLineGeom<'a> {
+	gl: &'a GLHandle,
 	vao: VertexArray,
 	vbo: Buffer,
 	color: Color,
@@ -405,7 +406,7 @@ impl SimpleLineGeom {
 		];
 		gl.buf_obj_with_data(ARRAY_BUFFER, vbo, &vertices, DYNAMIC_DRAW);
 		gl.vert_attr_arr(0, 2, NumType::Float, 2, 0); // Position
-		Self { vao, vbo, color } // Note: Binding to the VAO remains
+		Self { gl, vao, vbo, color } // Note: Binding to the VAO remains
 	}
 }
 
@@ -419,9 +420,9 @@ impl RenderPrimitive for SimpleLineGeom {
 		gl.draw_arrays(LINES, Self::NUM_VERTICES);
 	}
 
-	unsafe fn set_pos_f32(&self, gl: &GLHandle, vec: &[f32]) {
+	unsafe fn set_pos_f32(&self, vec: &[f32]) {
 		assert_eq!(vec.len(), 2 * Self::NUM_VERTICES as usize);
-		gl.update_buf_obj(ARRAY_BUFFER, self.vbo, 0, vec);
+		self.gl.update_buf_obj(ARRAY_BUFFER, self.vbo, 0, vec);
 	}
 
 	unsafe fn set_pos_f64(&self, _vec: &[f64]) {
@@ -431,7 +432,8 @@ impl RenderPrimitive for SimpleLineGeom {
 
 impl Geom for SimpleLineGeom {}
 
-pub(crate) struct SimpleRectGeom {
+pub(crate) struct SimpleRectGeom<'a> {
+	gl: &'a GLHandle,
 	vao: VertexArray,
 	vbo: Buffer,
 	ebo: Buffer,
@@ -459,7 +461,7 @@ impl SimpleRectGeom {
 		gl.buf_obj_with_data(ARRAY_BUFFER, vbo, &vertices, DYNAMIC_DRAW);
 		gl.buf_obj_with_data(ELEMENT_ARRAY_BUFFER, ebo, &Self::INDICES, STATIC_DRAW);
 		gl.vert_attr_arr(0, 2, NumType::Float, 2, 0); // Position
-		Self { vao, vbo, ebo, color } // Note: Binding to the VAO remains
+		Self { gl, vao, vbo, ebo, color } // Note: Binding to the VAO remains
 	}
 }
 
@@ -473,9 +475,9 @@ impl RenderPrimitive for SimpleRectGeom {
 		gl.draw_elements(TRIANGLES, Self::NUM_ELEMENTS);
 	}
 
-	unsafe fn set_pos_f32(&self, gl: &GLHandle, vec: &[f32]) {
+	unsafe fn set_pos_f32(&self, vec: &[f32]) {
 		assert_eq!(vec.len(), 4);
-		gl.update_buf_obj(ARRAY_BUFFER, self.vbo, 0, &[
+		self.gl.update_buf_obj(ARRAY_BUFFER, self.vbo, 0, &[
 			vec[0], vec[3], // top-left
 			vec[0], vec[1], // bottom-left
 			vec[2], vec[1], // bottom-right
@@ -495,7 +497,8 @@ trait Mesh : RenderPrimitive {
 }
 
 /// Simplest form of a **Mesh**
-pub(crate) struct SpriteMesh {
+pub(crate) struct SpriteMesh<'a> {
+	gl: &'a GLHandle,
 	vao: VertexArray,
 	vbo: Buffer,
 	ebo: Buffer,
@@ -529,7 +532,7 @@ impl SpriteMesh {
 		gl.buf_obj_with_data(ELEMENT_ARRAY_BUFFER, ebo, &Self::INDICES, STATIC_DRAW);
 		gl.vert_attr_arr(0, 2, NumType::Float, 2, 0); // Position
 		gl.vert_attr_arr(1, 2, NumType::Float, 2, 8); // Texture coord
-		Self { vao, vbo, ebo } // Note: Binding to the VAO remains
+		Self { gl, vao, vbo, ebo } // Note: Binding to the VAO remains
 	}
 }
 
@@ -544,9 +547,9 @@ impl RenderPrimitive for SpriteMesh {
 		gl.draw_elements(TRIANGLES, Self::NUM_ELEMENTS);
 	}
 
-	unsafe fn set_pos_f32(&self, gl: &GLHandle, vec: &[f32]) {
+	unsafe fn set_pos_f32(&self,  vec: &[f32]) {
 		assert_eq!(vec.len(), 4);
-		gl.update_buf_obj(ARRAY_BUFFER, self.vbo, 0, &[
+		self.gl.update_buf_obj(ARRAY_BUFFER, self.vbo, 0, &[
 			vec[0], vec[3], // top-left
 			vec[0], vec[1], // bottom-left
 			vec[2], vec[1], // bottom-right
