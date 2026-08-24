@@ -5,5 +5,5 @@ edition = "2024"
 rust-version = "1.85.0"
 
 [build-dependencies]
-cmake = "0.1.54"
-bindgen = "0.71.1"
+cmake = "0.1.58"
+bindgen = "0.72.1"

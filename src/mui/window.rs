@@ -49,6 +49,7 @@ impl WindowHandle {
 		window.gl_make_current(&gl_context)?;
 		let loader = |s: &str| sdl_handle.video.gl_get_proc_address(s)
 			.map_or(null::<fn()>(), |f| f as *const _) as *const _;
+		gl::load_with(loader); // fallback
 		let gl = unsafe { glow::Context::from_loader_function(loader) };
 		let gl_ex = GLExHandle::new(loader);
 		let gl_handle = GLHandle::new(gl_context, gl, gl_ex)?;
