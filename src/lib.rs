@@ -47,6 +47,7 @@ use std::fmt::Display;
 use std::panic::{catch_unwind, take_hook, AssertUnwindSafe};
 use std::ptr::{from_raw_parts, null};
 use bytemuck::cast_slice;
+use crate::mui::rendering3d::{Render3DEfx, Render3dPrimitive};
 
 #[derive(From)]
 struct FerriciaError(String);
@@ -967,16 +968,21 @@ jni_ferricia! {
 }
 
 jni_ferricia! {
-	client:Gwr.newMeshGeomCube(mut env: JNIEnv, class: JClass, handle: jlong, width: jfloat, data: jintArray) -> jlong {
-		jni_get_arr!(arr = JIntArray; data, env);
-		jni_to_ptr(DrawableWorldObj::new(SimpleMesh3dGeom::new_cube(jni_ref_ptr::<WindowHandle>(handle).gl_handle(), width, Color::RGBA(arr[0] as _, arr[1] as _, arr[2] as _, arr[3] as _))))
+	client:Gwr.newMeshGeomCube(mut env: JNIEnv, class: JClass, handle: jlong, width: jfloat) -> jlongArray {
+		jni_to_destructed_ptr!(SimpleMesh3dGeom::new_cube(jni_ref_ptr::<WindowHandle>(handle).gl_handle(), width), dyn Render3dPrimitive, env);
 	}
 }
 
 jni_ferricia! {
-	client:Gwr.newMeshGeomSphere(mut env: JNIEnv, class: JClass, handle: jlong, radius: jfloat, data: jintArray) -> jlong {
+	client:Gwr.newMeshGeomSphere(mut env: JNIEnv, class: JClass, handle: jlong, radius: jfloat) -> jlongArray {
+		jni_to_destructed_ptr!(SimpleMesh3dGeom::new_sphere(jni_ref_ptr::<WindowHandle>(handle).gl_handle(), radius), dyn Render3dPrimitive, env);
+	}
+}
+
+jni_ferricia! {
+	client:Gwr.newDrawableWorldObj(mut env: JNIEnv, class: JClass, handle: jlong, data: jintArray) -> jlong {
 		jni_get_arr!(arr = JIntArray; data, env);
-		jni_to_ptr(DrawableWorldObj::new(SimpleMesh3dGeom::new_sphere(jni_ref_ptr::<WindowHandle>(handle).gl_handle(), radius, Color::RGBA(arr[0] as _, arr[1] as _, arr[2] as _, arr[3] as _))))
+		jni_to_ptr(DrawableWorldObj::new(jni_ref_wide_ptr(handle), Render3DEfx::Color(Color::RGBA(arr[0] as _, arr[1] as _, arr[2] as _, arr[3] as _))))
 	}
 }
 
