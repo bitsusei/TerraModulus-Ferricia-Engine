@@ -2,7 +2,7 @@
  * SPDX-FileCopyrightText: 2025 TerraModulus Team and Contributors
  * SPDX-License-Identifier: LGPL-3.0-only
  */
-use crate::mui::ogl::GLHandle;
+use crate::mui::ogl::{GLExHandle, GLHandle};
 use crate::mui::SdlHandle;
 use crate::{FerriciaError, FerriciaResult};
 use sdl3::video::{SwapInterval, Window, WindowBuildError};
@@ -47,8 +47,11 @@ impl WindowHandle {
 		sdl_handle.video.text_input().stop(&window);
 		let gl_context = window.gl_create_context()?;
 		window.gl_make_current(&gl_context)?;
-		let gl = unsafe { glow::Context::from_loader_function(|s| sdl_handle.video.gl_get_proc_address(s).map_or(null::<fn()>(), |f| f as *const _) as *const _) };
-		let gl_handle = GLHandle::new(gl_context, gl)?;
+		let loader = |s: &str| sdl_handle.video.gl_get_proc_address(s)
+			.map_or(null::<fn()>(), |f| f as *const _) as *const _;
+		let gl = unsafe { glow::Context::from_loader_function(loader) };
+		let gl_ex = GLExHandle::new(loader);
+		let gl_handle = GLHandle::new(gl_context, gl, gl_ex)?;
 		gl_handle.gl_resize_viewport(MIN_WIDTH, MIN_HEIGHT);
 		Ok(Self {
 			gl_handle: Arc::new(gl_handle),

@@ -57,16 +57,18 @@ csgrs = { version =  "0.20.1", default-features = false, features = ["f32", "del
 bytemuck = "1.25.0"
 #nvtt_rs = "0.11.0"
 
+[target.'cfg(windows)'.dependencies]
+glutin_wgl_sys = "0.6.1"
+
 [target.'cfg(windows)'.dev-dependencies]
 criterion = { version = "0.8.2", features = ["html_reports"] }
-glutin_wgl_sys = "0.6.1"
 
 [target.'cfg(unix)'.dev-dependencies]
 # pprof does not support >=0.6
 criterion = { version = "0.5.1", features = ["html_reports"] }
 pprof = { version = "0.15.0", features = ["criterion", "flamegraph"] }
 
-[target.'cfg(all(unix, not(target_os = "macos")))'.dev-dependencies]
+[target.'cfg(all(unix, not(target_os = "macos")))'.dependencies]
 glutin_glx_sys = "0.6.1"
 
 [[bench]]

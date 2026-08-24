@@ -32,6 +32,7 @@ use sdl3::video::GLContext;
 use semver::Version;
 use std::cmp::Ordering;
 use std::collections::HashSet;
+use std::ffi::{c_char, c_void, CStr};
 use std::slice;
 use std::sync::LazyLock;
 use bytemuck::Pod;
@@ -45,6 +46,7 @@ const VER_3_1: Version = Version::new(3, 1, 0);
 pub(crate) struct GLHandle {
 	gl: Context,
 	gl_context: GLContext,
+	extra: GLExHandle,
 	#[get = "pub"]
 	vendor: String,
 	#[get = "pub"]
@@ -55,7 +57,6 @@ pub(crate) struct GLHandle {
 	gl_version: Version,
 	#[get = "pub"]
 	glsl_version: Version,
-	platform_extensions: HashSet<String>,
 	features: HashSet<GLFeature>,
 }
 
@@ -68,10 +69,45 @@ enum GLFeature {
 	Ubo,
 }
 
+pub(crate) struct GLExHandle {
+	#[cfg(windows)]
+	wgl: glutin_wgl_sys::wgl_extra::Wgl,
+	/// Retrieve WGL/GLX extensions
+	extensions: HashSet<String>,
+}
+
+impl GLExHandle {
+	pub(crate) fn new<F: FnMut(&str) -> *const c_void>(f: F) -> Self {
+		let wgl = glutin_wgl_sys::wgl_extra::Wgl::load_with(f);
+		#[cfg(windows)]
+		let extensions = unsafe {
+			if wgl.GetExtensionsStringARB.is_loaded() {
+				let s = c_char_to_string_lossy(wgl.GetExtensionsStringARB(glutin_wgl_sys::wgl::GetCurrentDC()));
+				s.split(" ").map(String::from).collect()
+			} else if wgl.GetExtensionsStringEXT.is_loaded() {
+				let s = c_char_to_string_lossy(wgl.GetExtensionsStringEXT());
+				s.split(" ").map(String::from).collect()
+			} else {
+				HashSet::new()
+			}
+		};
+		#[cfg(not(windows))]
+		let extensions = HashSet::new();
+		Self { wgl, extensions }
+	}
+}
+
+fn c_char_to_string_lossy(ptr: *const c_char) -> String {
+	if ptr.is_null() { return String::new(); }
+	unsafe {
+		CStr::from_ptr(ptr).to_string_lossy().into_owned()
+	}
+}
+
 /// Supposed to be **immutable**.
 impl GLHandle {
 	/// Make sure context is current and function pointer is handled before this.
-	pub(crate) fn new(gl_context: GLContext, gl: Context) -> Result<Self, String> {
+	pub(crate) fn new(gl_context: GLContext, gl: Context, extra: GLExHandle) -> Result<Self, String> {
 		let full_glsl_version = unsafe { gl.get_parameter_string(SHADING_LANGUAGE_VERSION) };
 		let gl_version = gl.version();
 		if gl_version.is_embedded {
@@ -79,9 +115,9 @@ impl GLHandle {
 		}
 		let handle = Self {
 			gl_context,
+			extra,
 			vendor: unsafe { gl.get_parameter_string(VENDOR) },
 			renderer: unsafe { gl.get_parameter_string(RENDERER) },
-			platform_extensions: get_platform_extensions(),
 			full_gl_version: unsafe { gl.get_parameter_string(VERSION) },
 			gl_version: Version::new(gl_version.major as _, gl_version.minor as _, gl_version.revision.unwrap_or(0) as _),
 			gl,
@@ -107,13 +143,13 @@ impl GLHandle {
 		}
 
 		if self.gl_version.cmp(&VER_3_0) == Ordering::Less { // < 3.0
-			if !self.platform_extensions.contains("GL_ARB_vertex_array_object") {
+			if !self.gl.supported_extensions().contains("GL_ARB_vertex_array_object") {
 				return Err(format!("GL_ARB_vertex_array_object not found with GL {}", self.gl_version));
 			}
 		}
 
 		if self.gl_version.cmp(&VER_3_1) == Ordering::Less { // < 3.1
-			if self.platform_extensions.contains("GL_ARB_uniform_buffer_object") {
+			if self.gl.supported_extensions().contains("GL_ARB_uniform_buffer_object") {
 				self.features.insert(GLFeature::Ubo);
 			}
 		} else {
@@ -290,7 +326,7 @@ impl GLHandle {
 	}
 }
 
-fn slice_to_u8_slice<T: bytemuck::Pod>(data: &[T]) -> &[u8] {
+fn slice_to_u8_slice<T: Pod>(data: &[T]) -> &[u8] {
 	bytemuck::cast_slice(data)
 	// unsafe {
 	// 	slice::from_raw_parts(
@@ -298,11 +334,6 @@ fn slice_to_u8_slice<T: bytemuck::Pod>(data: &[T]) -> &[u8] {
 	// 		size_of_val(data),
 	// 	)
 	// }
-}
-
-/// Retrieve WGL/GLX extensions
-fn get_platform_extensions() -> HashSet<String> {
-	todo!()
 }
 
 static VERSION_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^(\d+)\.(\d+)").expect("invalid regex"));
