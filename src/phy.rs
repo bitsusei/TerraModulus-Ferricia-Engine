@@ -84,7 +84,7 @@ impl PhyWorld {
 			objs: OrderSet::default(),
 		}
 	}
-	
+
 	pub fn set_gravity(&self, x: f64, y: f64, z: f64) {
 		self.data.set_gravity(x, y, z);
 	}

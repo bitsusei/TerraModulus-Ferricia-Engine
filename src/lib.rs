@@ -27,7 +27,7 @@ use crate::mui::{
 		TexProgram,
 		GeneralTransform,
 	},
-	rendering3d::{Camera3d, DrawableWorldObj, GwrGeoProgram, SimpleMesh3dGeom},
+	rendering3d::{Camera3d, DrawableWorldObj, GwrGeoProgram, SimpleMesh3dGeom, Render3DEfx, Render3dPrimitive},
 	window::WindowHandle,
 	MuiEvent,
 	SdlHandle,
@@ -47,7 +47,6 @@ use std::fmt::Display;
 use std::panic::{catch_unwind, take_hook, AssertUnwindSafe};
 use std::ptr::{from_raw_parts, null};
 use bytemuck::cast_slice;
-use crate::mui::rendering3d::{Render3DEfx, Render3dPrimitive};
 
 #[derive(From)]
 struct FerriciaError(String);

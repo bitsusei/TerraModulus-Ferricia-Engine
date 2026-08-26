@@ -904,6 +904,12 @@ impl OdeSpace {
 		unsafe { dSpaceCollide(self.id, contact_manager as *mut _ as _, Some(near_callback)) }
 	}
 
+	pub fn filter_region_box(&self, region: OdeBox) {
+		let mut handle = RegionFiltererHandle::new(region.id);
+		unsafe { dSpaceCollide(self.id, &mut handle as *mut _ as _, Some(region_collision_callback)) }
+		
+	}
+
 	pub fn add(&self, geom: &impl OdeGeom) {
 		unsafe { dSpaceAdd(self.id, geom.id()) }
 	}
@@ -918,6 +924,50 @@ impl OdeSpace {
 
 	pub fn get_nums_geom(&self) -> i32 {
 		unsafe { dSpaceGetNumGeoms(self.id) }
+	}
+}
+
+struct RegionFiltererHandle {
+	region: dGeomID,
+	buf: Vec<dGeomID>,
+}
+
+impl RegionFiltererHandle {
+	pub fn new(region: dGeomID) -> Self {
+		Self { region, buf: Vec::new() }
+	}
+
+	fn push(&mut self, geom: dContactGeom) {
+		if geom.g1 == self.region {
+			self.buf.push(geom.g2);
+		} else if geom.g2 == self.region {
+			self.buf.push(geom.g1);
+		} else {
+			panic!("region mismatch");
+		}
+	}
+}
+
+/// Filter Geoms with a region; modified from [near_callback].
+unsafe extern "C" fn region_collision_callback(data: *mut c_void, o1: dGeomID, o2: dGeomID) {
+	unsafe {
+		let is_1_space = dGeomIsSpace (o1) != 0;
+		let is_2_space = dGeomIsSpace (o2) != 0;
+		if is_1_space || is_2_space {
+			// colliding a space with something :
+			dSpaceCollide2 (o1, o2, data, Some(region_collision_callback));
+		} else {
+			// colliding two non-space geoms, so generate contact
+			// points between o1 and o2
+			let mut contact_array = [const { MaybeUninit::uninit() }; MAX_CONTACTS as _];
+			let num_contact = dCollide(o1, o2, MAX_CONTACTS as _, contact_array[0].as_mut_ptr(), size_of::<dContactGeom>() as _);
+			// add these contact points to the simulation ...
+			let handle = &mut *(data as *mut RegionFiltererHandle);
+			contact_array[0..(num_contact as _)]
+				.iter_mut()
+				.map(|e| e.assume_init_read())
+				.for_each(|g| handle.push(g));
+		}
 	}
 }
 
