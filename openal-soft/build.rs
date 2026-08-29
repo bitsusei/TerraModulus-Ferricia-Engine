@@ -28,7 +28,7 @@ fn top_level_cargo_target_dir() -> PathBuf {
 
 fn main() {
 	let dst = cmake::Config::new("openal-soft-src")
-		.define("ODE_WITH_DEMOS", "OFF")
+		// .define("ODE_WITH_DEMOS", "OFF")
 		.build();
 
 	println!("cargo:rustc-link-search=native={}", dst.join("lib").display());
