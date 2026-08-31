@@ -8,10 +8,11 @@
 use crate::mui::ogl::{GLHandle, NumType, ShaderType, SrcTexFmt, SrcTexTyp, TexSrc, VertexAttrVariant};
 use crate::mui::window::WindowHandle;
 use crate::FerriciaResult;
+use bytemuck::cast_slice_box;
 use glow::{Buffer, NativeTexture, NativeVertexArray, Program, Shader, Texture, UniformLocation, VertexArray, ARRAY_BUFFER, DYNAMIC_DRAW, ELEMENT_ARRAY_BUFFER, LINES, STATIC_DRAW, TRIANGLES};
 use image::imageops::flip_vertical_in_place;
-use image::{DynamicImage, EncodableLayout, ImageBuffer, ImageReader, Rgb, Rgb32FImage, RgbImage, Rgba, Rgba32FImage, RgbaImage};
-use nalgebra_glm::{identity, mat3_to_mat4, ortho, rotation2d, scaling, translation, DVec3, Mat4, TMat4, Vec3};
+use image::{DynamicImage, ImageBuffer, ImageReader, Rgb, Rgb32FImage, RgbImage, Rgba, Rgba32FImage, RgbaImage};
+use nalgebra_glm::{identity, mat3_to_mat4, ortho, rotation2d, scaling, translation, DVec3, Mat4, TMat4, Vec3, Vec4};
 use ordermap::OrderSet;
 use sdl3::pixels::Color;
 use std::any::Any;
@@ -22,7 +23,6 @@ use std::io::Cursor;
 use std::num::NonZeroU32;
 use std::ptr;
 use std::sync::{Arc, LazyLock};
-use bytemuck::cast_slice_box;
 
 static IDENT_MAT_4: LazyLock<TMat4<f32>> = LazyLock::new(identity);
 
@@ -135,6 +135,36 @@ impl CanvasHandle {
 		program.uniform(&self.gl_handle, &self.ortho_proj_mat, set, context);
 		set.prim.draw(&self.gl_handle);
 	}
+
+	pub(super) fn draw_text_rect(&self,
+	                             prim: &super::font::SimpleRectGeom,
+	                             program: &GeoProgram,
+	                             model: Mat4,
+	                             color: cosmic_text::Color) {
+		if self.used_program.get() != program.id() {
+			program.apply(&self.gl_handle);
+			self.used_program.set(program.id());
+		}
+
+		prim.apply_vao();
+		program.uniform_simple(&self.gl_handle, &self.ortho_proj_mat, model);
+		prim.draw(color);
+	}
+
+	pub(super) fn draw_text_glyph(&self,
+	                              prim: &super::font::GlyphMesh,
+	                              program: &TxtProgram,
+	                              model: Mat4,
+	                              color: Vec4) {
+		if self.used_program.get() != program.id() {
+			program.apply(&self.gl_handle);
+			self.used_program.set(program.id());
+		}
+
+		prim.apply_vao();
+		program.uniform(&self.gl_handle, &self.ortho_proj_mat, model, color);
+		prim.draw();
+	}
 }
 
 use crate::mui::rendering3d::{Camera3d, DrawableWorldObj, GwrProgram};
@@ -183,6 +213,12 @@ impl GeoProgram {
 			filter_pos: gl.get_uniform_location(id, "filter"),
 			id,
 		})
+	}
+
+	fn uniform_simple(&self, gl: &GLHandle, proj: &TMat4<f32>, model: TMat4<f32>) {
+		gl.use_uniform_mat_4(&self.projection_pos, proj);
+		gl.use_uniform_mat_4(&self.model_pos, &model);
+		gl.use_uniform_mat_4(&self.filter_pos, &*IDENT_MAT_4);
 	}
 }
 
@@ -243,6 +279,43 @@ impl GuiProgram for TexProgram {
 		gl.use_uniform_mat_4(&self.model_pos, model.as_ref());
 		let filter = set.eval_filter_mat(&drawing_context);
 		gl.use_uniform_mat_4(&self.filter_pos, filter.as_ref());
+	}
+}
+
+pub(crate) struct TxtProgram {
+	id: Program,
+	model_pos: UniformLocation,
+	projection_pos: UniformLocation,
+	text_color_pos: UniformLocation,
+}
+
+impl TxtProgram {
+	pub(crate) fn new(gl: &GLHandle, vsh: String, fsh: String) -> FerriciaResult<Self> {
+		let id = gl.new_shader_program([
+			compile_shader_from(gl, ShaderType::Vertex, vsh)?,
+			compile_shader_from(gl, ShaderType::Fragment, fsh)?,
+		]);
+		Ok(Self {
+			model_pos: gl.get_uniform_location(id, "model"),
+			projection_pos: gl.get_uniform_location(id, "projection"),
+			text_color_pos: gl.get_uniform_location(id, "textColor"),
+			id,
+		})
+	}
+
+	fn id(&self) -> u32 {
+		self.id.0.get()
+	}
+
+	#[inline]
+	fn apply(&self, gl: &GLHandle) {
+		gl.use_program(self.id);
+	}
+
+	fn uniform(&self, gl: &GLHandle, proj: &TMat4<f32>, model: TMat4<f32>, text_color: Vec4) {
+		gl.use_uniform_mat_4(&self.projection_pos, proj);
+		gl.use_uniform_mat_4(&self.model_pos, &model);
+		gl.use_uniform_vec_4(&self.text_color_pos, &text_color);
 	}
 }
 

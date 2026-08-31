@@ -24,8 +24,8 @@
 
 use getset::Getters;
 use gl::{VertexAttrib1d, VertexAttrib1f, VertexAttrib1s, VertexAttrib2d, VertexAttrib2f, VertexAttrib2s, VertexAttrib3d, VertexAttrib3f, VertexAttrib3s, VertexAttrib4Nub, VertexAttrib4d, VertexAttrib4f, VertexAttrib4s, VertexAttribI1i, VertexAttribI1ui, VertexAttribI2i, VertexAttribI2ui, VertexAttribI3i, VertexAttribI3ui, VertexAttribI4i, VertexAttribI4ui};
-use glow::{Buffer, Context, HasContext, PixelUnpackData, Program, Shader, Texture, UniformLocation, VertexArray, BGR, BGRA, BLEND, BYTE, CLAMP_TO_EDGE, COLOR_BUFFER_BIT, COMPUTE_SHADER, DOUBLE, FLOAT, FRAGMENT_SHADER, GEOMETRY_SHADER, INT, LINEAR, MULTISAMPLE, NEAREST, NEAREST_MIPMAP_LINEAR, ONE_MINUS_SRC_ALPHA, RENDERER, RGB, RGB10, RGB10_A2, RGB12, RGB16, RGB16F, RGB32F, RGB8, RGBA, RGBA12, RGBA16, RGBA16F, RGBA32F, RGBA8, SHADING_LANGUAGE_VERSION, SHORT, SRC_ALPHA, SRGB, SRGB8, SRGB8_ALPHA8, SRGB_ALPHA, TESS_CONTROL_SHADER, TESS_EVALUATION_SHADER, TEXTURE0, TEXTURE_2D, TEXTURE_MAG_FILTER, TEXTURE_MIN_FILTER, TEXTURE_WRAP_S, TEXTURE_WRAP_T, UNPACK_ALIGNMENT, UNSIGNED_BYTE, UNSIGNED_INT, UNSIGNED_SHORT, VENDOR, VERSION, VERTEX_SHADER};
-use nalgebra_glm::{TMat4, Vec3};
+use glow::{Buffer, Context, HasContext, PixelUnpackData, Program, Shader, Texture, UniformLocation, VertexArray, BGR, BGRA, BLEND, BYTE, CLAMP_TO_EDGE, COLOR_BUFFER_BIT, COMPUTE_SHADER, DOUBLE, FLOAT, FRAGMENT_SHADER, GEOMETRY_SHADER, INT, LINEAR, MULTISAMPLE, NEAREST, NEAREST_MIPMAP_LINEAR, ONE_MINUS_SRC_ALPHA, RENDERER, RGB, RGB10, RGB10_A2, RGB12, RGB16, RGB16F, RGB32F, RGB8, RGBA, RGBA12, RGBA16, RGBA16F, RGBA32F, RGBA8, SHADING_LANGUAGE_VERSION, SHORT, SRC_ALPHA, SRGB, SRGB8, SRGB8_ALPHA8, SRGB_ALPHA, STREAM_DRAW, TESS_CONTROL_SHADER, TESS_EVALUATION_SHADER, TEXTURE0, TEXTURE_2D, TEXTURE_MAG_FILTER, TEXTURE_MIN_FILTER, TEXTURE_WRAP_S, TEXTURE_WRAP_T, UNPACK_ALIGNMENT, UNSIGNED_BYTE, UNSIGNED_INT, UNSIGNED_SHORT, VENDOR, VERSION, VERTEX_SHADER};
+use nalgebra_glm::{TMat4, Vec3, Vec4};
 use num_traits::{Bounded, Num};
 use regex::Regex;
 use sdl3::video::GLContext;
@@ -206,6 +206,12 @@ impl GLHandle {
 		unsafe { self.gl.buffer_sub_data_u8_slice(target, (offset * size_of::<T>()) as _, slice_to_u8_slice(data)) }
 	}
 
+	pub(super) fn orphan_and_update_buf_obj<T: Number>(&self, target: u32, buffer: Buffer, data: &[T]) {
+		unsafe { self.gl.bind_buffer(target, Some(buffer)) }
+		unsafe { self.gl.buffer_data_size(target, data.len() as _, STREAM_DRAW) }
+		unsafe { self.gl.buffer_sub_data_u8_slice(target, 0, slice_to_u8_slice(data)) }
+	}
+
 	/// Defines an array of Vertex Attribute. Normalized is not applied.
 	pub(super) fn vert_attr_arr(&self, i: u32, vec_size: usize, kind: NumType, stride_len: usize, offset_len: usize) {
 		unsafe { self.gl.enable_vertex_attrib_array(i) }
@@ -278,6 +284,10 @@ impl GLHandle {
 
 	pub(super) fn use_uniform_vec_3(&self, i: &UniformLocation, vec: &Vec3) {
 		unsafe { self.gl.uniform_3_f32_slice(Some(i), vec.as_slice()) }
+	}
+
+	pub(super) fn use_uniform_vec_4(&self, i: &UniformLocation, vec: &Vec4) {
+		unsafe { self.gl.uniform_4_f32_slice(Some(i), vec.as_slice()) }
 	}
 
 	pub(super) fn draw_arrays(&self, mode: u32, count: u32) {
