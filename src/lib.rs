@@ -47,6 +47,7 @@ use std::fmt::Display;
 use std::panic::{catch_unwind, take_hook, AssertUnwindSafe};
 use std::ptr::{from_raw_parts, null};
 use bytemuck::cast_slice;
+use crate::mui::font::{FontManager, GlyphManager};
 
 #[derive(From)]
 struct FerriciaError(String);
@@ -928,6 +929,21 @@ jni_ferricia! {
 			jni_ref_ptr::<TexProgram>(program_handle),
 			Some(texture_handle as _),
 		)
+	}
+}
+
+jni_ferricia! {
+	client:Mui.newFontManager(mut env: JNIEnv, class: JClass) -> jlong {
+		jni_to_ptr(FontManager::new())
+	}
+}
+
+jni_ferricia! {
+	client:Mui.newGlyphManager(mut env: JNIEnv, class: JClass, manager_handle: jlong, handle: jlong) -> jlong {
+		jni_to_ptr(GlyphManager::new(
+			jni_ref_ptr::<FontManager>(manager_handle),
+			jni_ref_ptr::<WindowHandle>(handle).gl_handle(),
+		))
 	}
 }
 

@@ -25,7 +25,7 @@
 use getset::Getters;
 use gl::{VertexAttrib1d, VertexAttrib1f, VertexAttrib1s, VertexAttrib2d, VertexAttrib2f, VertexAttrib2s, VertexAttrib3d, VertexAttrib3f, VertexAttrib3s, VertexAttrib4Nub, VertexAttrib4d, VertexAttrib4f, VertexAttrib4s, VertexAttribI1i, VertexAttribI1ui, VertexAttribI2i, VertexAttribI2ui, VertexAttribI3i, VertexAttribI3ui, VertexAttribI4i, VertexAttribI4ui};
 use glow::{Buffer, Context, HasContext, PixelUnpackData, Program, Shader, Texture, UniformLocation, VertexArray, BGR, BGRA, BLEND, BYTE, CLAMP_TO_EDGE, COLOR_BUFFER_BIT, COMPUTE_SHADER, DOUBLE, FLOAT, FRAGMENT_SHADER, GEOMETRY_SHADER, INT, LINEAR, MULTISAMPLE, NEAREST, NEAREST_MIPMAP_LINEAR, ONE_MINUS_SRC_ALPHA, RENDERER, RGB, RGB10, RGB10_A2, RGB12, RGB16, RGB16F, RGB32F, RGB8, RGBA, RGBA12, RGBA16, RGBA16F, RGBA32F, RGBA8, SHADING_LANGUAGE_VERSION, SHORT, SRC_ALPHA, SRGB, SRGB8, SRGB8_ALPHA8, SRGB_ALPHA, STREAM_DRAW, TESS_CONTROL_SHADER, TESS_EVALUATION_SHADER, TEXTURE0, TEXTURE_2D, TEXTURE_MAG_FILTER, TEXTURE_MIN_FILTER, TEXTURE_WRAP_S, TEXTURE_WRAP_T, UNPACK_ALIGNMENT, UNSIGNED_BYTE, UNSIGNED_INT, UNSIGNED_SHORT, VENDOR, VERSION, VERTEX_SHADER};
-use nalgebra_glm::{TMat4, Vec3, Vec4};
+use nalgebra_glm::{TMat4, UVec2, Vec2, Vec3, Vec4};
 use num_traits::{Bounded, Num};
 use regex::Regex;
 use sdl3::video::GLContext;
@@ -298,6 +298,28 @@ impl GLHandle {
 		unsafe { self.gl.draw_elements(mode, count as _, UNSIGNED_INT, 0) }
 	}
 
+	pub(super) fn update_msdf_texture(&self, tex: Texture, offset: UVec2, bitmap: &Bitmap<f32, 3>) {
+		unsafe {
+			self.gl.pixel_store_i32(UNPACK_ALIGNMENT, 4);
+			self.gl.bind_texture(TEXTURE_2D, Some(tex));
+			self.gl.tex_sub_image_2d(
+				TEXTURE_2D,
+				0,
+				offset.x as _,
+				offset.y as _,
+				bitmap.width as _,
+				bitmap.height as _,
+				RGB,
+				FLOAT,
+				PixelUnpackData::Slice(Some(slice_to_u8_slice(bitmap.data()))),
+			);
+		}
+	}
+
+	pub(super) fn update_sprite_texture() {
+		todo!("with mipmaps")
+	}
+
 	pub(super) fn new_sprite_texture(&self, tex_src: TexSrc, itn_tex_fmt: Option<ItnTexFmt>) -> Texture {
 		unsafe {
 			// Refers to https://forums.developer.nvidia.com/t/how-does-gl-unpack-alignment-work/39432/4
@@ -347,7 +369,7 @@ impl GLHandle {
 		}
 	}
 
-	pub(super) fn new_msdf_texture(&self, bitmap: Bitmap<f32, 3>) -> Texture {
+	pub(super) fn new_msdf_texture(&self, bitmap: &Bitmap<f32, 3>) -> Texture {
 		unsafe {
 			self.gl.pixel_store_i32(UNPACK_ALIGNMENT, 4);
 			let tex = self.gl.create_texture().unwrap();

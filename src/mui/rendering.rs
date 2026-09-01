@@ -155,12 +155,15 @@ impl CanvasHandle {
 	                              prim: &super::font::GlyphMesh,
 	                              program: &TxtProgram,
 	                              model: Mat4,
-	                              color: Vec4) {
+	                              color: Vec4,
+	                              texture: Texture,
+	) {
 		if self.used_program.get() != program.id() {
 			program.apply(&self.gl_handle);
 			self.used_program.set(program.id());
 		}
 
+		self.gl_handle.use_texture_2d(texture);
 		prim.apply_vao();
 		program.uniform(&self.gl_handle, &self.ortho_proj_mat, model, color);
 		prim.draw();
