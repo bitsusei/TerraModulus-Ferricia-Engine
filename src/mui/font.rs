@@ -6,10 +6,10 @@ use crate::mui::ogl::{GLHandle, NumType, VertexAttrVariant};
 use crate::util::OpaqueId;
 use array_macro::array;
 use bymsdfgen_core::{generate_msdf, Bitmap, Bounds, Contour, EdgeSegment, Projection, SdfTransformation, Shape, Vector2};
-use cosmic_text::{fontdb, Attrs, Buffer, CacheKey, CacheKeyFlags, Color, Command, FontSystem, PhysicalGlyph, Renderer, Shaping, SubpixelBin, SwashCache};
+use cosmic_text::{fontdb, Attrs, Buffer, CacheKey, CacheKeyFlags, Color, Command, Family, FontSystem, PhysicalGlyph, Renderer, Shaping, SubpixelBin, SwashCache};
 use crunch::Rotation;
 use glow::{Texture, VertexArray, ARRAY_BUFFER, DYNAMIC_DRAW, ELEMENT_ARRAY_BUFFER, STATIC_DRAW, TRIANGLES};
-use nalgebra_glm::{scaling, translation, Mat4, UVec2, Vec3, Vec4};
+use nalgebra_glm::{scaling, translation, Mat4, UVec2, Vec2, Vec3, Vec4};
 use num_traits::Num;
 use rect_iter::RectRange;
 use std::collections::HashMap;
@@ -19,7 +19,8 @@ use crate::mui::rendering::{CanvasHandle, GeoProgram, TxtProgram};
 
 /// Manager for Font Sources
 pub(crate) struct FontManager {
-	font_system: FontSystem,
+	font_system: FontSystem, // only used in DEMO
+	font: fontdb::ID, // only used in DEMO
 }
 
 /// Literally `32..=126`
@@ -265,7 +266,6 @@ pub(crate) struct GlyphManager {
 	swash_cache: SwashCache,
 	pre_glyphs: CrunchGlyphMap,
 	tmp_glyphs: RectPackGlyphMap,
-	font: fontdb::ID, // only used in DEMO
 }
 
 /// [`CacheKey`] but without font size and pixel binning for MSDF glyph caching.
@@ -304,7 +304,7 @@ impl PartialCacheKey {
 	}
 }
 
-pub(super) struct TextRenderer {
+pub(crate) struct TextRenderer {
 	gl: Arc<GLHandle>,
 	geo_program: &'static GeoProgram,
 	txt_program: &'static TxtProgram,
@@ -313,8 +313,8 @@ pub(super) struct TextRenderer {
 }
 
 impl TextRenderer {
-	pub(super) fn new(
-		gl: Arc<GLHandle>,
+	pub(crate) fn new(
+		gl: &Arc<GLHandle>,
 		geo_program: &'static GeoProgram,
 		txt_program: &'static TxtProgram,
 	) -> Self {
@@ -323,7 +323,7 @@ impl TextRenderer {
 			txt_program,
 			rect_geom: SimpleRectGeom::new(gl.clone()),
 			text_mesh: GlyphMesh::new(gl.clone()),
-			gl,
+			gl: gl.clone(),
 		}
 	}
 
@@ -336,7 +336,7 @@ impl TextRenderer {
 		);
 	}
 
-	fn render_glyph(&mut self, canvas_handle: &CanvasHandle, pos: (i32, i32), size: (f32, f32), texture: Texture, rect: Rect, color: Color) {
+	fn render_glyph(&mut self, canvas_handle: &CanvasHandle, pos: (f32, f32), size: (f32, f32), texture: Texture, rect: Rect, color: Color) {
 		// self.glyph_manager.render_glyph(self.font_system, physical_glyph);
 		self.text_mesh.update_vertices(
 			[rect.x as _, rect.y as _, (rect.x + rect.width) as _, (rect.y + rect.height) as _]
@@ -344,7 +344,7 @@ impl TextRenderer {
 		canvas_handle.draw_text_glyph(
 			&self.text_mesh,
 			self.txt_program,
-			compute_model_mat(Vec3::new(pos.0 as _, pos.1 as _, 0.0), Vec3::new(size.0, size.1, 1.0)),
+			compute_model_mat(Vec3::new(pos.0, pos.1, 0.0), Vec3::new(size.0, size.1, 1.0)),
 			Vec4::from(color.as_rgba().map(|v| v as f32 / 255.0)),
 			texture,
 		);
@@ -358,43 +358,17 @@ fn compute_model_mat(pos: Vec3, scale: Vec3) -> Mat4 {
 impl GlyphManager {
 	pub(crate) fn new(font_manager: &mut FontManager, gl: &Arc<GLHandle>) -> Self {
 		// TODO only used in DEMO
-		let font_system = &mut font_manager.font_system;
-		let mut fonts: Vec<(_, u8)> = font_system.db().faces().filter_map(|f| {
-			if f.families.iter().any(|family| family.0 == "Noto Sans") {
-				Some((f.id, 5))
-			} else if f.families.iter().any(|family| family.0 == "Microsoft Sans Serif") {
-				Some((f.id, 4))
-			} else if f.families.iter().any(|family| family.0 == "Liberation Sans") {
-				Some((f.id, 3))
-			} else if f.families.iter().any(|family| family.0 == "Source Sans Pro") {
-				Some((f.id, 2))
-			} else if f.families.iter().any(|family| family.0 == "DejaVu Sans") {
-				Some((f.id, 1))
-			} else if f.families.iter().any(|family| family.0 == "Arial") {
-				Some((f.id, 0))
-			} else {
-				None
-			}
-		}).collect();
-		if fonts.is_empty() { panic!("no matched fonts found."); }
-		fonts.sort_by(|a, b| a.1.cmp(&b.1));
-		fonts.reverse();
-		let font = fonts.first().unwrap().0;
-		if font_system.get_font(font, fontdb::Weight::NORMAL).is_none() {
-			panic!("font mismatched for {:?}.", font_system.db().face(font).unwrap());
-		}
 		let mut new = Self {
 			swash_cache: SwashCache::new(),
 			pre_glyphs: CrunchGlyphMap::new(gl.clone(), 8192, 8192),
 			tmp_glyphs: RectPackGlyphMap::new(gl.clone(), 4096, 4096),
-			font,
 		};
 		for k in PRINTABLE_ASCII.map(|c| PartialCacheKey {
-			font_id: font,
+			font_id: font_manager.font,
 			glyph_id: c as u16,
 			font_weight: Default::default(),
 		}) {
-			let glyph = new.gen_glyph(font_system, k);
+			let glyph = new.gen_glyph(&mut font_manager.font_system, k);
 			new.pre_glyphs.push(k, glyph.1, glyph.0);
 		}
 		new.pre_glyphs.pack();
@@ -406,6 +380,7 @@ impl GlyphManager {
 	                          text_renderer: &mut TextRenderer,
 	                          font_manager: &mut FontManager,
 	                          ctx: &mut TextRenderingContext,
+	                          pos: Vec2,
 	) {
 		// SAFE as mutable borrows here are used strictly separately.
 		let font_system = &raw mut font_manager.font_system;
@@ -414,6 +389,7 @@ impl GlyphManager {
 			font_system: unsafe { &mut *font_system },
 			text_renderer,
 			canvas_handle,
+			pos,
 		};
 		ctx.buffer.render(unsafe { &mut *font_system }, &mut renderer, ctx.color);
 	}
@@ -422,6 +398,7 @@ impl GlyphManager {
 	                canvas_handle: &CanvasHandle,
 	                text_renderer: &mut TextRenderer,
 	                font_system: &mut FontSystem,
+	                pos: Vec2,
 	                glyph: PhysicalGlyph,
 	                color: Color,
 	) {
@@ -430,7 +407,7 @@ impl GlyphManager {
 		let scale = f32::from_bits(glyph.cache_key.font_size_bits) as f64 / rect.size.0.max(rect.size.1);
 		text_renderer.render_glyph(
 			canvas_handle,
-			(glyph.x, glyph.y),
+			(pos.x + glyph.x as f32, pos.y + glyph.y as f32),
 			((rect.size.0 * scale) as _, (rect.size.1 * scale) as _),
 			tex,
 			rect.ctn_rect,
@@ -494,7 +471,7 @@ impl GlyphManager {
 	}
 }
 
-pub(crate) struct SimpleRectGeom {
+pub(super) struct SimpleRectGeom {
 	gl: Arc<GLHandle>,
 	vao: VertexArray,
 	vbo: glow::Buffer,
@@ -536,7 +513,7 @@ impl SimpleRectGeom {
 	}
 }
 
-pub(crate) struct GlyphMesh {
+pub(super) struct GlyphMesh {
 	gl: Arc<GLHandle>,
 	vao: VertexArray,
 	vbo: glow::Buffer,
@@ -603,13 +580,36 @@ impl GlyphMesh {
 impl FontManager {
 	pub(crate) fn new() -> Self {
 		// TODO Only used in DEMO
-		Self {
-			font_system: FontSystem::new(),
+		let mut font_system = FontSystem::new();
+		let mut fonts: Vec<(_, u8)> = font_system.db().faces().filter_map(|f| {
+			if f.families.iter().any(|family| family.0 == "Noto Sans") {
+				Some((f.id, 5))
+			} else if f.families.iter().any(|family| family.0 == "Microsoft Sans Serif") {
+				Some((f.id, 4))
+			} else if f.families.iter().any(|family| family.0 == "Liberation Sans") {
+				Some((f.id, 3))
+			} else if f.families.iter().any(|family| family.0 == "Source Sans Pro") {
+				Some((f.id, 2))
+			} else if f.families.iter().any(|family| family.0 == "DejaVu Sans") {
+				Some((f.id, 1))
+			} else if f.families.iter().any(|family| family.0 == "Arial") {
+				Some((f.id, 0))
+			} else {
+				None
+			}
+		}).collect();
+		if fonts.is_empty() { panic!("no matched fonts found."); }
+		fonts.sort_by(|a, b| a.1.cmp(&b.1));
+		fonts.reverse();
+		let font = fonts.first().unwrap().0;
+		if font_system.get_font(font, fontdb::Weight::NORMAL).is_none() {
+			panic!("font mismatched for {:?}.", font_system.db().face(font).unwrap());
 		}
+		Self { font_system, font }
 	}
 
-	pub(super) fn render_text(&mut self, mut renderer: GlyphRenderer, ctx: &mut TextRenderingContext) {
-		ctx.buffer.render(&mut self.font_system, &mut renderer, ctx.color)
+	pub(crate) fn new_attrs(&self) -> Attrs {
+		Attrs::new().family(Family::Name(&self.font_system.db().face(self.font).unwrap().families.get(0).unwrap().0))
 	}
 }
 
@@ -618,6 +618,7 @@ pub(super) struct GlyphRenderer<'a> {
 	font_system: &'a mut FontSystem,
 	text_renderer: &'a mut TextRenderer,
 	canvas_handle: &'a CanvasHandle,
+	pos: Vec2,
 }
 
 const GLYPH_RESOLUTION: usize = 16;
@@ -632,6 +633,7 @@ impl Renderer for GlyphRenderer<'_> {
 			self.canvas_handle,
 			self.text_renderer,
 			self.font_system,
+			self.pos,
 			physical_glyph,
 			color,
 		);
@@ -652,10 +654,15 @@ pub(crate) struct TextRenderingContext<'a> {
 	pub(crate) color: Color,
 }
 
+pub use cosmic_text::Attrs as FontAttrs;
+pub use cosmic_text::Buffer as TextBuffer;
+pub use cosmic_text::Color as TextColor;
+pub use cosmic_text::Metrics as TextMetrics;
+
 impl TextRenderingContext<'_> {
 	#[inline]
-	pub(crate) fn set_text(&mut self, text: &str) {
-		self.buffer.set_text(text, &self.attrs, Shaping::Basic, None)
+	pub(crate) fn set_text(&mut self, text: String) {
+		self.buffer.set_text(&text, &self.attrs, Shaping::Basic, None)
 	}
 }
 

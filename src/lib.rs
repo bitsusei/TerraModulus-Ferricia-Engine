@@ -37,7 +37,7 @@ use derive_more::From;
 use jni::objects::{JByteArray, JClass, JDoubleArray, JFloatArray, JIntArray, JObject, JString, ReleaseMode};
 use jni::sys::{jboolean, jbyte, jbyteArray, jdouble, jdoubleArray, jfloat, jfloatArray, jint, jintArray, jlong, jlongArray, jobjectArray, jsize, jstring};
 use jni::JNIEnv;
-use nalgebra_glm::{DQuat, DVec3, DVec4, Vec3};
+use nalgebra_glm::{DQuat, DVec3, DVec4, Vec2, Vec3};
 use paste::paste;
 use sdl3::pixels::Color;
 use std::backtrace::Backtrace;
@@ -47,7 +47,8 @@ use std::fmt::Display;
 use std::panic::{catch_unwind, take_hook, AssertUnwindSafe};
 use std::ptr::{from_raw_parts, null};
 use bytemuck::cast_slice;
-use crate::mui::font::{FontManager, GlyphManager};
+use crate::mui::font::{FontAttrs, FontManager, GlyphManager, TextBuffer, TextColor, TextMetrics, TextRenderer, TextRenderingContext};
+use crate::mui::rendering::TxtProgram;
 
 #[derive(From)]
 struct FerriciaError(String);
@@ -944,6 +945,121 @@ jni_ferricia! {
 			jni_ref_ptr::<FontManager>(manager_handle),
 			jni_ref_ptr::<WindowHandle>(handle).gl_handle(),
 		))
+	}
+}
+
+jni_ferricia! {
+	client:Mui.newTxtProgram(
+		mut env: JNIEnv,
+		class: JClass,
+		handle: jlong,
+		vsh: JString,
+		fsh: JString,
+	) -> jlong {
+		jni_res_to_ptr(TxtProgram::new(
+			jni_ref_ptr::<WindowHandle>(handle).gl_handle(),
+			jni_get_string(&mut env, vsh),
+			jni_get_string(&mut env, fsh),
+		), &mut env)
+	}
+}
+
+jni_ferricia! {
+	client:Mui.newTextRenderer(
+		mut env: JNIEnv,
+		class: JClass,
+		handle: jlong,
+		geo_program_handle: jlong,
+		txt_program_handle: jlong,
+	) -> jlong {
+		jni_to_ptr(TextRenderer::new(
+			jni_ref_ptr::<WindowHandle>(handle).gl_handle(),
+			jni_ref_ptr::<GeoProgram>(geo_program_handle),
+			jni_ref_ptr::<TxtProgram>(txt_program_handle),
+		))
+	}
+}
+
+jni_ferricia! {
+	client:Mui.newTextRenderingContext(
+		mut env: JNIEnv,
+		class: JClass,
+		handle: jlong,
+		data1: jfloatArray, // len 2
+		data2: jintArray, // len 4
+	) -> jlong {
+		jni_get_arr!(metrics = JFloatArray; data1, env);
+		jni_get_arr!(color = JIntArray; data2, env);
+		jni_to_ptr(TextRenderingContext {
+			attrs: jni_ref_ptr::<FontManager>(handle).new_attrs(),
+			buffer: TextBuffer::new_empty(TextMetrics::new(metrics[0], metrics[1])),
+			color: TextColor::rgba(color[0] as _, color[1] as _, color[2] as _, color[3] as _),
+		})
+	}
+}
+
+jni_ferricia! {
+	client:Mui.setTextRenderingContextColor(
+		mut env: JNIEnv,
+		class: JClass,
+		handle: jlong,
+		data: jintArray, // len 4
+	) {
+		jni_get_arr!(color = JIntArray; data, env);
+		jni_ref_ptr::<TextRenderingContext>(handle).color =
+			TextColor::rgba(color[0] as _, color[1] as _, color[2] as _, color[3] as _);
+	}
+}
+
+jni_ferricia! {
+	client:Mui.setTextRenderingContextMetrics(
+		mut env: JNIEnv,
+		class: JClass,
+		handle: jlong,
+		data: jfloatArray, // len 2
+	) {
+		jni_get_arr!(metrics = JFloatArray; data, env);
+		jni_ref_ptr::<TextRenderingContext>(handle).buffer.set_metrics(TextMetrics::new(metrics[0], metrics[1]));
+	}
+}
+
+jni_ferricia! {
+	client:Mui.setTextRenderingContextSize(
+		mut env: JNIEnv,
+		class: JClass,
+		handle: jlong,
+		data: jfloatArray, // len 2
+	) {
+		jni_get_arr!(size = JFloatArray; data, env);
+		jni_ref_ptr::<TextRenderingContext>(handle).buffer.set_size(Some(size[0]), Some(size[1]));
+	}
+}
+
+jni_ferricia! {
+	client:Mui.setTextRenderingContextText(mut env: JNIEnv, class: JClass, handle: jlong, text: JString) {
+		jni_ref_ptr::<TextRenderingContext>(handle).set_text(jni_get_string(&mut env, text))
+	}
+}
+
+jni_ferricia! {
+	client:Mui.renderText(
+		mut env: JNIEnv,
+		class: JClass,
+		canvas_handle: jlong,
+		glyph_mgr_handle: jlong,
+		renderer_handle: jlong,
+		font_mgr_handle: jlong,
+		ctx_handle: jlong,
+		data: jfloatArray,
+	) {
+		jni_get_arr!(pos = JFloatArray; data, env);
+		jni_ref_ptr::<GlyphManager>(glyph_mgr_handle).render_text(
+			jni_ref_ptr::<CanvasHandle>(canvas_handle),
+			jni_ref_ptr::<TextRenderer>(renderer_handle),
+			jni_ref_ptr::<FontManager>(font_mgr_handle),
+			jni_ref_ptr::<TextRenderingContext>(ctx_handle),
+			Vec2::new(pos[0], pos[1]),
+		)
 	}
 }
 
