@@ -208,7 +208,7 @@ impl GLHandle {
 
 	pub(super) fn orphan_and_update_buf_obj<T: Number>(&self, target: u32, buffer: Buffer, data: &[T]) {
 		unsafe { self.gl.bind_buffer(target, Some(buffer)) }
-		unsafe { self.gl.buffer_data_size(target, data.len() as _, STREAM_DRAW) }
+		unsafe { self.gl.buffer_data_size(target, (size_of::<T>() * data.len()) as _, STREAM_DRAW) }
 		unsafe { self.gl.buffer_sub_data_u8_slice(target, 0, slice_to_u8_slice(data)) }
 	}
 

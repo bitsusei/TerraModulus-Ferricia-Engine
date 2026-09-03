@@ -3,10 +3,12 @@
  * SPDX-License-Identifier: LGPL-3.0-only
  */
 use crate::mui::ogl::{GLHandle, NumType, VertexAttrVariant};
+use crate::mui::rendering::{CanvasHandle, GeoProgram, TxtProgram};
 use crate::util::OpaqueId;
 use array_macro::array;
-use bymsdfgen_core::{generate_msdf, Bitmap, Bounds, Contour, EdgeSegment, Projection, SdfTransformation, Shape, Vector2};
-use cosmic_text::{fontdb, Attrs, Buffer, CacheKey, CacheKeyFlags, Color, Command, Family, FontSystem, PhysicalGlyph, Renderer, Shaping, SubpixelBin, SwashCache};
+use bymsdfgen_core::coloring::edge_coloring_simple;
+use bymsdfgen_core::{generate_msdf, Bitmap, Contour, EdgeSegment, Projection, SdfTransformation, Shape, Vector2};
+use cosmic_text::{fontdb::{self, Query}, Attrs, Buffer, CacheKey, CacheKeyFlags, Color, Command, Family, FontSystem, PhysicalGlyph, Renderer, Shaping, SubpixelBin, SwashCache};
 use crunch::Rotation;
 use glow::{Texture, VertexArray, ARRAY_BUFFER, DYNAMIC_DRAW, ELEMENT_ARRAY_BUFFER, STATIC_DRAW, TRIANGLES};
 use nalgebra_glm::{scaling, translation, Mat4, UVec2, Vec2, Vec3, Vec4};
@@ -15,7 +17,6 @@ use rect_iter::RectRange;
 use std::collections::HashMap;
 use std::ops::Range;
 use std::sync::Arc;
-use crate::mui::rendering::{CanvasHandle, GeoProgram, TxtProgram};
 
 /// Manager for Font Sources
 pub(crate) struct FontManager {
@@ -42,7 +43,7 @@ struct CrunchGlyphMap {
 	atlas: MsdfTexture,
 	rect: crunch::Rect,
 	packer: crunch::Packer<PartialCacheKey>,
-	items: HashMap<PartialCacheKey, (Bitmap<f32, 3>, (f64, f64))>,
+	items: HashMap<PartialCacheKey, (Bitmap<f32, 3>, BoundingBox)>,
 	packed: HashMap<PartialCacheKey, PaddedRect>,
 }
 
@@ -169,9 +170,9 @@ impl CrunchGlyphMap {
 		}
 	}
 
-	fn push(&mut self, key: PartialCacheKey, item: Bitmap<f32, 3>, size: (f64, f64)) {
+	fn push(&mut self, key: PartialCacheKey, item: Bitmap<f32, 3>, bounds: BoundingBox) {
 		self.packer.push(crunch::Item::new(key, item.width, item.height, Rotation::None));
-		self.items.insert(key, (item, size));
+		self.items.insert(key, (item, bounds));
 	}
 
 	/// DEMO: This should be called only once to avoid troublesome handling of texture data.
@@ -190,7 +191,7 @@ impl CrunchGlyphMap {
 	fn get_glyph(&self, key: PartialCacheKey) -> Option<GlyphRect> {
 		self.packed.get(&key).map(|v| GlyphRect {
 			ctn_rect: v.ctn,
-			size: self.items.get(&key).unwrap().1
+			bounds: self.items.get(&key).unwrap().1
 		})
 	}
 }
@@ -198,7 +199,7 @@ impl CrunchGlyphMap {
 struct RectPackGlyphMap {
 	atlas: MsdfTexture,
 	packer: rect_packer::DensePacker,
-	items: HashMap<PartialCacheKey, (Bitmap<f32, 3>, PaddedRect, (f64, f64))>,
+	items: HashMap<PartialCacheKey, (Bitmap<f32, 3>, PaddedRect, BoundingBox)>,
 }
 
 impl RectPackGlyphMap {
@@ -210,22 +211,22 @@ impl RectPackGlyphMap {
 		}
 	}
 
-	fn push(&mut self, key: PartialCacheKey, item: Bitmap<f32, 3>, size: (f64, f64)) -> GlyphRect {
+	fn push(&mut self, key: PartialCacheKey, item: Bitmap<f32, 3>, bounds: BoundingBox) -> GlyphRect {
 		let rect = self.packer.pack(item.width as _, item.height as _, false).unwrap();
 		let rect = PaddedRect::with_out(Rect::from_rect_pack(rect), 1);
 		place_glyph(&mut self.atlas.bitmap, &item, &rect);
 		self.atlas.update_part(UVec2::new(rect.out.x as _, rect.out.y as _), &item);
-		self.items.insert(key, (item, rect, size));
+		self.items.insert(key, (item, rect, bounds));
 		GlyphRect {
 			ctn_rect: self.items.get(&key).unwrap().1.ctn,
-			size,
+			bounds,
 		}
 	}
 
 	fn get_glyph(&self, key: PartialCacheKey) -> Option<GlyphRect> {
-		self.items.get(&key).map(|(_, rect, size)| GlyphRect {
+		self.items.get(&key).map(|(_, rect, bounds)| GlyphRect {
 			ctn_rect: rect.ctn,
-			size: *size,
+			bounds: *bounds,
 		})
 	}
 }
@@ -233,8 +234,8 @@ impl RectPackGlyphMap {
 struct GlyphRect {
 	/// [Rect] for MSDF of the glyph to be rendered
 	ctn_rect: Rect,
-	/// Base size of the glyph
-	size: (f64, f64),
+	/// Bounding box of the glyph with offset
+	bounds: BoundingBox,
 }
 
 struct MsdfTexture {
@@ -284,7 +285,7 @@ impl PartialCacheKey {
 		CacheKey {
 			font_id: self.font_id,
 			glyph_id: self.glyph_id,
-			font_size_bits: 64.0_f32.to_bits(),
+			font_size_bits: (GLYPH_RESOLUTION as f32).to_bits(),
 			// Zero binning for pixel perfect
 			x_bin: SubpixelBin::Zero,
 			y_bin: SubpixelBin::Zero,
@@ -336,17 +337,20 @@ impl TextRenderer {
 		);
 	}
 
-	fn render_glyph(&mut self, canvas_handle: &CanvasHandle, pos: (f32, f32), size: (f32, f32), texture: Texture, rect: Rect, color: Color) {
+	fn render_glyph(&mut self, canvas_handle: &CanvasHandle, pos: (f32, f32), size: (f32, f32), texture: (Texture, (usize, usize)), rect: Rect, color: Color) {
 		// self.glyph_manager.render_glyph(self.font_system, physical_glyph);
-		self.text_mesh.update_vertices(
-			[rect.x as _, rect.y as _, (rect.x + rect.width) as _, (rect.y + rect.height) as _]
-		);
+		self.text_mesh.update_vertices([
+			rect.x as f32 / texture.1.0 as f32,
+			rect.y as f32 / texture.1.1 as f32,
+			(rect.x + rect.width) as f32 / texture.1.0 as f32,
+			(rect.y + rect.height) as f32 / texture.1.1 as f32,
+		]);
 		canvas_handle.draw_text_glyph(
 			&self.text_mesh,
 			self.txt_program,
 			compute_model_mat(Vec3::new(pos.0, pos.1, 0.0), Vec3::new(size.0, size.1, 1.0)),
 			Vec4::from(color.as_rgba().map(|v| v as f32 / 255.0)),
-			texture,
+			texture.0,
 		);
 	}
 }
@@ -360,8 +364,8 @@ impl GlyphManager {
 		// TODO only used in DEMO
 		let mut new = Self {
 			swash_cache: SwashCache::new(),
-			pre_glyphs: CrunchGlyphMap::new(gl.clone(), 8192, 8192),
-			tmp_glyphs: RectPackGlyphMap::new(gl.clone(), 4096, 4096),
+			pre_glyphs: CrunchGlyphMap::new(gl.clone(), 1024, 1024),
+			tmp_glyphs: RectPackGlyphMap::new(gl.clone(), 512, 512),
 		};
 		for k in PRINTABLE_ASCII.map(|c| PartialCacheKey {
 			font_id: font_manager.font,
@@ -404,53 +408,81 @@ impl GlyphManager {
 	) {
 		let (tex, rect) = self.get_glyph(font_system, PartialCacheKey::from_internal(glyph.cache_key));
 		// Not sure how font size should be computed here.
-		let scale = f32::from_bits(glyph.cache_key.font_size_bits) as f64 / rect.size.0.max(rect.size.1);
+		let scale = f32::from_bits(glyph.cache_key.font_size_bits) / GLYPH_RESOLUTION as f32;
+		let size = (rect.bounds.x_max - rect.bounds.x_min, rect.bounds.y_max - rect.bounds.y_min);
 		text_renderer.render_glyph(
 			canvas_handle,
-			(pos.x + glyph.x as f32, pos.y + glyph.y as f32),
-			((rect.size.0 * scale) as _, (rect.size.1 * scale) as _),
+			(pos.x + glyph.x as f32 + rect.bounds.x_min * scale, pos.y + glyph.y as f32 + rect.bounds.y_min * scale),
+			((size.0 * scale) as _, (size.1 * scale) as _),
 			tex,
 			rect.ctn_rect,
 			color,
 		);
 	}
 
-	fn get_glyph(&mut self, font_system: &mut FontSystem, cache_key: PartialCacheKey) -> (Texture, GlyphRect) {
-		self.pre_glyphs.get_glyph(cache_key).map(|r| (self.pre_glyphs.atlas.texture, r))
-			.unwrap_or_else(|| (self.tmp_glyphs.atlas.texture, self.tmp_glyphs.get_glyph(cache_key).unwrap_or_else(|| {
+	fn get_glyph(&mut self, font_system: &mut FontSystem, cache_key: PartialCacheKey)
+		-> ((Texture, (usize, usize)), GlyphRect) {
+		fn get_value(value: GlyphRect, atlas: &MsdfTexture) -> ((Texture, (usize, usize)), GlyphRect) {
+			((atlas.texture, (atlas.bitmap.width, atlas.bitmap.height,)), value)
+		}
+		self.pre_glyphs.get_glyph(cache_key).map(|v| get_value(v, &self.pre_glyphs.atlas))
+			.unwrap_or_else(|| get_value(self.tmp_glyphs.get_glyph(cache_key).unwrap_or_else(|| {
 				let glyph = self.gen_glyph(font_system, cache_key);
 				self.tmp_glyphs.push(cache_key, glyph.1, glyph.0)
-			})))
+			}), &self.tmp_glyphs.atlas))
 	}
 
-	fn gen_glyph(&mut self, font_system: &mut FontSystem, cache_key: PartialCacheKey) -> ((f64, f64), Bitmap<f32, 3>) {
+	fn gen_glyph(&mut self, font_system: &mut FontSystem, cache_key: PartialCacheKey) -> (BoundingBox, Bitmap<f32, 3>) {
 		let mut shape = Shape::new();
 		let mut contour: Option<Contour> = None;
+		let mut init_pt: Option<Vector2> = None;
 		let mut prev_pt: Option<Vector2> = None;
+		let font = font_system.get_font(cache_key.font_id, cache_key.font_weight).unwrap();
+		// This is obviously so inefficient
+		let font_ref = cosmic_text::skrifa::FontRef::new(font.data()).unwrap();
+		let metrics = font_ref.glyph_metrics(
+			cosmic_text::skrifa::instance::Size::new(GLYPH_RESOLUTION as _),
+			cosmic_text::skrifa::instance::LocationRef::default(),
+		);
 		for cmd in self.swash_cache.get_outline_commands(font_system, cache_key.to_internal()).unwrap() {
 			match cmd {
 				Command::MoveTo(pt) => {
 					contour = Some(Contour::new());
 					prev_pt = Some(Vector2::new(pt.x as _, pt.y as _));
+					init_pt = prev_pt;
 				},
-				Command::LineTo(pt) => contour.as_mut().unwrap().add_edge(EdgeSegment::line(
-					prev_pt.unwrap(),
-					Vector2::new(pt.x as _, pt.y as _),
-				)),
-				Command::CurveTo(cp1, cp2, pt) => contour.as_mut().unwrap().add_edge(EdgeSegment::cubic(
-					prev_pt.unwrap(),
-					Vector2::new(cp1.x as _, cp1.y as _),
-					Vector2::new(cp2.x as _, cp2.y as _),
-					Vector2::new(pt.x as _, pt.y as _),
-				)),
-				Command::QuadTo(cp, pt) => contour.as_mut().unwrap().add_edge(EdgeSegment::quadratic(
-					prev_pt.unwrap(),
-					Vector2::new(cp.x as _, cp.y as _),
-					Vector2::new(pt.x as _, pt.y as _),
-				)),
+				Command::LineTo(pt) => {
+					contour.as_mut().unwrap().add_edge(EdgeSegment::line(
+						prev_pt.unwrap(),
+						Vector2::new(pt.x as _, pt.y as _),
+					));
+					prev_pt = Some(Vector2::new(pt.x as _, pt.y as _));
+				},
+				Command::CurveTo(cp1, cp2, pt) => {
+					contour.as_mut().unwrap().add_edge(EdgeSegment::cubic(
+						prev_pt.unwrap(),
+						Vector2::new(cp1.x as _, cp1.y as _),
+						Vector2::new(cp2.x as _, cp2.y as _),
+						Vector2::new(pt.x as _, pt.y as _),
+					));
+					prev_pt = Some(Vector2::new(pt.x as _, pt.y as _));
+				},
+				Command::QuadTo(cp, pt) => {
+					contour.as_mut().unwrap().add_edge(EdgeSegment::quadratic(
+						prev_pt.unwrap(),
+						Vector2::new(cp.x as _, cp.y as _),
+						Vector2::new(pt.x as _, pt.y as _),
+					));
+					prev_pt = Some(Vector2::new(pt.x as _, pt.y as _));
+				},
 				Command::Close => {
+					let mut contour = contour.take().unwrap();
+					if prev_pt != init_pt { // Not sure really Swash does not connect, but still a check is done here.
+						contour.add_edge(EdgeSegment::line(prev_pt.unwrap(), init_pt.unwrap()));
+					}
 					prev_pt = None;
-					shape.add_contour(contour.take().unwrap());
+					init_pt = None;
+					shape.add_contour(contour);
 				}
 			}
 		}
@@ -459,7 +491,8 @@ impl GlyphManager {
 		// 	.metrics().units_per_em as f64;
 		// Unfortunately this crate does not support using a section reference.
 		let mut bitmap = Bitmap::new(GLYPH_RESOLUTION + 2, GLYPH_RESOLUTION + 2);
-		let bounds = shape.get_bounds(0.0);
+		let bounds = metrics.bounds(cache_key.glyph_id.into()).unwrap();
+		edge_coloring_simple(&mut shape, 3.0, 0);
 		let projection = SdfTransformation::new(
 			compute_projection(bounds, GLYPH_RESOLUTION as _, 1.0),
 			Default::default(),
@@ -467,7 +500,7 @@ impl GlyphManager {
 		// TODO yet default but later may offer options for this
 		let cfg = Default::default();
 		generate_msdf(&mut bitmap, &shape, &projection, &cfg);
-		((bounds.r - bounds.l, bounds.t - bounds.b), bitmap)
+		(bounds, bitmap)
 	}
 }
 
@@ -551,7 +584,7 @@ impl GlyphMesh {
 	}
 
 	/// Update for tex coords; `[x0, y0, x1, y1]`; (0, 0) as bottom-left
-	fn update_vertices(&self, points: [u32; 4]) {
+	fn update_vertices(&self, points: [f32; 4]) {
 		// Buffer Orphaning (for OpenGL < 3.0)
 		let vertices: [f32; 16] = [
 			// positions
@@ -560,10 +593,10 @@ impl GlyphMesh {
 			1.0, 0.0, // bottom-right
 			1.0, 1.0, // top-right
 			// tex coords
-			points[0] as _, points[3] as _, // top-left
-			points[0] as _, points[1] as _, // bottom-left
-			points[2] as _, points[1] as _, // bottom-right
-			points[2] as _, points[3] as _, // top-right
+			points[0], points[3], // top-left
+			points[0], points[1], // bottom-left
+			points[2], points[1], // bottom-right
+			points[2], points[3], // top-right
 		];
 		self.gl.orphan_and_update_buf_obj(ARRAY_BUFFER, self.vbo, &vertices);
 	}
@@ -578,33 +611,22 @@ impl GlyphMesh {
 }
 
 impl FontManager {
+	const FAMILIES: [&str; 6] = [
+		"Noto Sans",
+		"Microsoft Sans Serif",
+		"Liberation Sans",
+		"Source Sans Pro",
+		"DejaVu Sans",
+		"Arial",
+	];
+
 	pub(crate) fn new() -> Self {
 		// TODO Only used in DEMO
 		let mut font_system = FontSystem::new();
-		let mut fonts: Vec<(_, u8)> = font_system.db().faces().filter_map(|f| {
-			if f.families.iter().any(|family| family.0 == "Noto Sans") {
-				Some((f.id, 5))
-			} else if f.families.iter().any(|family| family.0 == "Microsoft Sans Serif") {
-				Some((f.id, 4))
-			} else if f.families.iter().any(|family| family.0 == "Liberation Sans") {
-				Some((f.id, 3))
-			} else if f.families.iter().any(|family| family.0 == "Source Sans Pro") {
-				Some((f.id, 2))
-			} else if f.families.iter().any(|family| family.0 == "DejaVu Sans") {
-				Some((f.id, 1))
-			} else if f.families.iter().any(|family| family.0 == "Arial") {
-				Some((f.id, 0))
-			} else {
-				None
-			}
-		}).collect();
-		if fonts.is_empty() { panic!("no matched fonts found."); }
-		fonts.sort_by(|a, b| a.1.cmp(&b.1));
-		fonts.reverse();
-		let font = fonts.first().unwrap().0;
-		if font_system.get_font(font, fontdb::Weight::NORMAL).is_none() {
-			panic!("font mismatched for {:?}.", font_system.db().face(font).unwrap());
-		}
+		let families = Self::FAMILIES.map(|f| Family::Name(f));
+		let mut query = Query::default();
+		query.families = &families;
+		let font = font_system.db().query(&query).expect("no matched font(s) found.");
 		Self { font_system, font }
 	}
 
@@ -621,7 +643,7 @@ pub(super) struct GlyphRenderer<'a> {
 	pos: Vec2,
 }
 
-const GLYPH_RESOLUTION: usize = 16;
+const GLYPH_RESOLUTION: usize = 32;
 
 impl Renderer for GlyphRenderer<'_> {
 	fn rectangle(&mut self, x: i32, y: i32, w: u32, h: u32, color: Color) {
@@ -640,12 +662,15 @@ impl Renderer for GlyphRenderer<'_> {
 	}
 }
 
-/// Projecting `src.b` and `src.l` to `padding`, `src.t` and `src.r` to `bitmap_size + padding`.
+/// Projecting `src.y_min` and `src.x_min` to `padding`, `src.y_max` and `src.x_max` to `bitmap_size + padding`.
 #[inline]
-fn compute_projection(src: Bounds, bitmap_size: f64, padding: f64) -> Projection {
-	let sx = bitmap_size / (src.r - src.l);
-	let sy = bitmap_size / (src.t - src.b);
-	Projection::new(Vector2::new(sx, sy), Vector2::new(padding / sx - src.l, padding / sy - src.b))
+fn compute_projection(src: BoundingBox, bitmap_size: f64, padding: f64) -> Projection {
+	let sx = bitmap_size / (src.x_max - src.x_min) as f64;
+	let sy = bitmap_size / (src.y_max - src.y_min) as f64;
+	Projection::new(
+		Vector2::new(sx, sy),
+		Vector2::new(padding / sx - src.x_min as f64, padding / sy - src.y_min as f64),
+	)
 }
 
 pub(crate) struct TextRenderingContext<'a> {
@@ -654,6 +679,8 @@ pub(crate) struct TextRenderingContext<'a> {
 	pub(crate) color: Color,
 }
 
+use cosmic_text::skrifa::metrics::BoundingBox;
+use cosmic_text::skrifa::MetadataProvider;
 pub use cosmic_text::Attrs as FontAttrs;
 pub use cosmic_text::Buffer as TextBuffer;
 pub use cosmic_text::Color as TextColor;
