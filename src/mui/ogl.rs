@@ -282,6 +282,10 @@ impl GLHandle {
 		unsafe { self.gl.uniform_matrix_4_f32_slice(Some(i), false, mat.as_slice()) }
 	}
 
+	pub(super) fn use_uniform_vec_2(&self, i: &UniformLocation, vec: &Vec2) {
+		unsafe { self.gl.uniform_2_f32_slice(Some(i), vec.as_slice()) }
+	}
+
 	pub(super) fn use_uniform_vec_3(&self, i: &UniformLocation, vec: &Vec3) {
 		unsafe { self.gl.uniform_3_f32_slice(Some(i), vec.as_slice()) }
 	}

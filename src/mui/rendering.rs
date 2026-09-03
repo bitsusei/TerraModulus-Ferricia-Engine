@@ -12,7 +12,7 @@ use bytemuck::cast_slice_box;
 use glow::{Buffer, NativeTexture, NativeVertexArray, Program, Shader, Texture, UniformLocation, VertexArray, ARRAY_BUFFER, DYNAMIC_DRAW, ELEMENT_ARRAY_BUFFER, LINES, STATIC_DRAW, TRIANGLES};
 use image::imageops::flip_vertical_in_place;
 use image::{DynamicImage, ImageBuffer, ImageReader, Rgb, Rgb32FImage, RgbImage, Rgba, Rgba32FImage, RgbaImage};
-use nalgebra_glm::{identity, mat3_to_mat4, ortho, rotation2d, scaling, translation, DVec3, Mat4, TMat4, Vec3, Vec4};
+use nalgebra_glm::{identity, mat3_to_mat4, ortho, rotation2d, scaling, translation, DVec3, Mat4, TMat4, Vec3, Vec4, Vec2};
 use ordermap::OrderSet;
 use sdl3::pixels::Color;
 use std::any::Any;
@@ -157,6 +157,7 @@ impl CanvasHandle {
 	                              model: Mat4,
 	                              color: Vec4,
 	                              texture: Texture,
+	                              tex_size: Vec2,
 	) {
 		if self.used_program.get() != program.id() {
 			program.apply(&self.gl_handle);
@@ -165,7 +166,7 @@ impl CanvasHandle {
 
 		self.gl_handle.use_texture_2d(texture);
 		prim.apply_vao();
-		program.uniform(&self.gl_handle, &self.ortho_proj_mat, model, color);
+		program.uniform(&self.gl_handle, &self.ortho_proj_mat, model, color, tex_size);
 		prim.draw();
 	}
 }
@@ -290,6 +291,7 @@ pub(crate) struct TxtProgram {
 	model_pos: UniformLocation,
 	projection_pos: UniformLocation,
 	text_color_pos: UniformLocation,
+	tex_size_pos: UniformLocation,
 }
 
 impl TxtProgram {
@@ -302,6 +304,7 @@ impl TxtProgram {
 			model_pos: gl.get_uniform_location(id, "model"),
 			projection_pos: gl.get_uniform_location(id, "projection"),
 			text_color_pos: gl.get_uniform_location(id, "textColor"),
+			tex_size_pos: gl.get_uniform_location(id, "texSize"),
 			id,
 		})
 	}
@@ -315,10 +318,11 @@ impl TxtProgram {
 		gl.use_program(self.id);
 	}
 
-	fn uniform(&self, gl: &GLHandle, proj: &TMat4<f32>, model: TMat4<f32>, text_color: Vec4) {
+	fn uniform(&self, gl: &GLHandle, proj: &TMat4<f32>, model: TMat4<f32>, text_color: Vec4, tex_size: Vec2) {
 		gl.use_uniform_mat_4(&self.projection_pos, proj);
 		gl.use_uniform_mat_4(&self.model_pos, &model);
 		gl.use_uniform_vec_4(&self.text_color_pos, &text_color);
+		gl.use_uniform_vec_2(&self.tex_size_pos, &tex_size);
 	}
 }
 

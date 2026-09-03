@@ -6,12 +6,12 @@ use crate::mui::ogl::{GLHandle, NumType, VertexAttrVariant};
 use crate::mui::rendering::{CanvasHandle, GeoProgram, TxtProgram};
 use crate::util::OpaqueId;
 use array_macro::array;
-use bymsdfgen_core::coloring::edge_coloring_simple;
-use bymsdfgen_core::{generate_msdf, Bitmap, Contour, EdgeSegment, Projection, SdfTransformation, Shape, Vector2};
-use cosmic_text::{fontdb::{self, Query}, Attrs, Buffer, CacheKey, CacheKeyFlags, Color, Command, Family, FontSystem, PhysicalGlyph, Renderer, Shaping, SubpixelBin, SwashCache};
+use bymsdfgen_core::coloring::edge_coloring_ink_trap;
+use bymsdfgen_core::{Bitmap, Contour, DistanceMapping, EdgeSegment, Projection, SdfTransformation, Shape, Vector2, generate_msdf};
+use cosmic_text::{Attrs, Buffer, CacheKey, CacheKeyFlags, Color, Command, Family, FontSystem, PhysicalGlyph, Renderer, Shaping, SubpixelBin, SwashCache, fontdb::{self, Query}};
 use crunch::Rotation;
-use glow::{Texture, VertexArray, ARRAY_BUFFER, DYNAMIC_DRAW, ELEMENT_ARRAY_BUFFER, STATIC_DRAW, TRIANGLES};
-use nalgebra_glm::{scaling, translation, Mat4, UVec2, Vec2, Vec3, Vec4};
+use glow::{ARRAY_BUFFER, DYNAMIC_DRAW, ELEMENT_ARRAY_BUFFER, STATIC_DRAW, TRIANGLES, Texture, VertexArray};
+use nalgebra_glm::{Mat4, UVec2, Vec2, Vec3, Vec4, scaling, translation};
 use num_traits::Num;
 use rect_iter::RectRange;
 use std::collections::HashMap;
@@ -26,6 +26,8 @@ pub(crate) struct FontManager {
 
 /// Literally `32..=126`
 const PRINTABLE_ASCII: [char; 95] = array![x => (x + 32) as u8 as _; 126 - 32 + 1];
+
+const ATLAS_PADDING: usize = 2;
 
 // trait GlyphMap {
 // 	fn add_glyph(&mut self,);
@@ -179,7 +181,7 @@ impl CrunchGlyphMap {
 	fn pack(&mut self) {
 		let mut packed = HashMap::new();
 		for i in self.packer.pack(self.rect).unwrap_or_else(|_| panic!("should have been succeeded")) {
-			packed.insert(i.data, PaddedRect::with_out(Rect::from_crunch(i.rect), 1));
+			packed.insert(i.data, PaddedRect::with_out(Rect::from_crunch(i.rect), ATLAS_PADDING));
 		}
 		for (k, v) in &packed {
 			place_glyph(&mut self.atlas.bitmap, &self.items.get(k).unwrap().0, v);
@@ -213,7 +215,7 @@ impl RectPackGlyphMap {
 
 	fn push(&mut self, key: PartialCacheKey, item: Bitmap<f32, 3>, bounds: BoundingBox) -> GlyphRect {
 		let rect = self.packer.pack(item.width as _, item.height as _, false).unwrap();
-		let rect = PaddedRect::with_out(Rect::from_rect_pack(rect), 1);
+		let rect = PaddedRect::with_out(Rect::from_rect_pack(rect), ATLAS_PADDING);
 		place_glyph(&mut self.atlas.bitmap, &item, &rect);
 		self.atlas.update_part(UVec2::new(rect.out.x as _, rect.out.y as _), &item);
 		self.items.insert(key, (item, rect, bounds));
@@ -351,6 +353,7 @@ impl TextRenderer {
 			compute_model_mat(Vec3::new(pos.0, pos.1, 0.0), Vec3::new(size.0, size.1, 1.0)),
 			Vec4::from(color.as_rgba().map(|v| v as f32 / 255.0)),
 			texture.0,
+			Vec2::new(texture.1.0 as _, texture.1.1 as _),
 		);
 	}
 }
@@ -367,9 +370,11 @@ impl GlyphManager {
 			pre_glyphs: CrunchGlyphMap::new(gl.clone(), 1024, 1024),
 			tmp_glyphs: RectPackGlyphMap::new(gl.clone(), 512, 512),
 		};
+		let font = font_manager.font_system.get_font(font_manager.font, Default::default()).unwrap();
+		let charmap = font.as_swash().charmap();
 		for k in PRINTABLE_ASCII.map(|c| PartialCacheKey {
 			font_id: font_manager.font,
-			glyph_id: c as u16,
+			glyph_id: charmap.map(c),
 			font_weight: Default::default(),
 		}) {
 			let glyph = new.gen_glyph(&mut font_manager.font_system, k);
@@ -490,12 +495,13 @@ impl GlyphManager {
 		// 	.get_font(physical_glyph.cache_key.font_id, physical_glyph.cache_key.font_weight).unwrap()
 		// 	.metrics().units_per_em as f64;
 		// Unfortunately this crate does not support using a section reference.
-		let mut bitmap = Bitmap::new(GLYPH_RESOLUTION + 2, GLYPH_RESOLUTION + 2);
+		let mut bitmap = Bitmap::new(GLYPH_RESOLUTION + 2 * ATLAS_PADDING, GLYPH_RESOLUTION + 2 * ATLAS_PADDING);
 		let bounds = metrics.bounds(cache_key.glyph_id.into()).unwrap();
-		edge_coloring_simple(&mut shape, 3.0, 0);
+		shape.normalize();
+		edge_coloring_ink_trap(&mut shape, 3.0, 0);
 		let projection = SdfTransformation::new(
-			compute_projection(bounds, GLYPH_RESOLUTION as _, 1.0),
-			Default::default(),
+			compute_projection(bounds, GLYPH_RESOLUTION as _, ATLAS_PADDING as _),
+			DistanceMapping::from_range(bymsdfgen_core::Range::symmetric(3.0)),
 		);
 		// TODO yet default but later may offer options for this
 		let cfg = Default::default();
@@ -679,8 +685,8 @@ pub(crate) struct TextRenderingContext<'a> {
 	pub(crate) color: Color,
 }
 
-use cosmic_text::skrifa::metrics::BoundingBox;
 use cosmic_text::skrifa::MetadataProvider;
+use cosmic_text::skrifa::metrics::BoundingBox;
 pub use cosmic_text::Attrs as FontAttrs;
 pub use cosmic_text::Buffer as TextBuffer;
 pub use cosmic_text::Color as TextColor;
