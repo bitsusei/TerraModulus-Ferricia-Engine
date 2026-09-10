@@ -849,8 +849,8 @@ dependencies = [
  "geo-buf",
  "hashbrown 0.15.3",
  "nalgebra",
- "parry3d",
- "rapier3d",
+ "parry3d-f64",
+ "rapier3d-f64",
  "robust",
  "thiserror 2.0.12",
 ]
@@ -3025,10 +3025,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "parry3d"
+name = "parry3d-f64"
 version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a50f0d5730859f8326b26c8057aae09b790804f3e6c9dec38f4b2a1b91664529"
+checksum = "ed9184cf88474deb3e5ec6c67a8c6fe51ee9572e8c476d44b7de643937a125c5"
 dependencies = [
  "approx",
  "arrayvec",
@@ -3343,10 +3343,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a611d15b50743feb4c76b7d03edcb0e64f399c26961e4efe6975bc398be6aa3d"
 
 [[package]]
-name = "rapier3d"
+name = "rapier3d-f64"
 version = "0.24.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "106edf55a415c64d2dccbb79faa2085e2bd02ded26b41b399b04b90219484c7e"
+checksum = "75a10d0735644bdc60b54a573a1ba413bab4f4822ce403e4f637f4d0b3d54d6b"
 dependencies = [
  "approx",
  "arrayvec",
@@ -3359,7 +3359,7 @@ dependencies = [
  "num-derive",
  "num-traits",
  "ordered-float",
- "parry3d",
+ "parry3d-f64",
  "profiling",
  "rustc-hash",
  "simba",

@@ -88,6 +88,13 @@ impl Camera3d {
 		self.view_mat = look_view_mat(pos);
 	}
 
+	pub(crate) fn get_space_range(&self) -> (f64, f64) {
+		(
+			self.canvas_size.0 as f64 / self.zoom_level as f64 / STANDARD_SCALING as f64,
+			self.canvas_size.1 as f64 / self.zoom_level as f64 / STANDARD_SCALING as f64,
+		)
+	}
+
 	/// Zoom level is the factor based on the Standard Scaling.
 	pub(crate) fn set_zoom_level(&mut self, zoom_level: f32) {
 		self.proj_mat = ortho_proj_mat(self.canvas_size, zoom_level * STANDARD_SCALING);
@@ -364,6 +371,7 @@ pub(crate) struct SimpleMesh3dGeom {
 impl SimpleMesh3dGeom {
 	pub(crate) fn new_cube(gl: &GLHandle, width: f32) -> Self {
 		// Has to be centered for Rotation matrix to work correctly, if correct.
+		let width = width as f64;
 		let mesh = Mesh::cube(width, None).translate(-width / 2.0, -width / 2.0, -width / 2.0);
 		Self::new_mesh_centered(gl, mesh)
 	}
@@ -385,7 +393,7 @@ impl SimpleMesh3dGeom {
 				p.vertices[2].normal.iter(),
 			])
 			.flatten()
-			.cloned()
+			.map(|n| *n as f32)
 			.collect::<Vec<_>>();
 		let indices = (0..tri_csg.polygons.len())
 			.flat_map(|i| {
@@ -401,7 +409,7 @@ impl SimpleMesh3dGeom {
 	}
 
 	pub(crate) fn new_sphere(gl: &GLHandle, radius: f32) -> Self {
-		let mesh = Mesh::sphere(radius, 20, 10, None);
+		let mesh = Mesh::sphere(radius as _, 20, 10, None);
 		Self::new_mesh_centered(gl, mesh)
 	}
 }

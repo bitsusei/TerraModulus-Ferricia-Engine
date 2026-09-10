@@ -2,16 +2,19 @@
  * SPDX-FileCopyrightText: 2026 TerraModulus Team and Contributors
  * SPDX-License-Identifier: LGPL-3.0-only
  */
+use std::collections::HashSet;
 use crate::util::{concat_arrays, create_file_c, str_from_c};
 use getset::{Getters, MutGetters};
 use nalgebra_glm::{DMat3, DMat4, DMat4x3, DQuat, DVec3, DVec4};
-use ode_sys::{dBodyAddForce, dBodyAddForceAtPos, dBodyAddForceAtRelPos, dBodyAddRelForce, dBodyAddRelForceAtPos, dBodyAddRelForceAtRelPos, dBodyAddTorque, dBodyCreate, dBodyDestroy, dBodyDisable, dBodyEnable, dBodyGetAngularVel, dBodyGetForce, dBodyGetGravityMode, dBodyGetLinearVel, dBodyGetPosition, dBodyGetQuaternion, dBodyGetRotation, dBodyID, dBodyIsEnabled, dBodyIsKinematic, dBodySetAngularVel, dBodySetDynamic, dBodySetGravityMode, dBodySetKinematic, dBodySetLinearVel, dBodySetMass, dBodySetMovedCallback, dBodySetPosition, dBodySetQuaternion, dBodySetRotation, dCloseODE, dCollide, dContact, dContactGeom, dCreateBox, dCreateCapsule, dCreateCylinder, dCreatePlane, dCreateRay, dCreateSphere, dGeomBoxSetLengths, dGeomCapsuleSetParams, dGeomClearOffset, dGeomCylinderSetParams, dGeomDestroy, dGeomDisable, dGeomEnable, dGeomGetAABB, dGeomGetBody, dGeomGetOffsetPosition, dGeomGetOffsetQuaternion, dGeomGetOffsetRotation, dGeomGetPosition, dGeomGetQuaternion, dGeomGetRotation, dGeomID, dGeomIsEnabled, dGeomIsSpace, dGeomPlaneSetParams, dGeomRaySet, dGeomRaySetBackfaceCull, dGeomRaySetClosestHit, dGeomRaySetFirstContact, dGeomRaySetLength, dGeomRaySetParams, dGeomSetBody, dGeomSetCategoryBits, dGeomSetCollideBits, dGeomSetOffsetPosition, dGeomSetOffsetQuaternion, dGeomSetOffsetRotation, dGeomSetOffsetWorldPosition, dGeomSetOffsetWorldQuaternion, dGeomSetOffsetWorldRotation, dGeomSetPosition, dGeomSetQuaternion, dGeomSetRotation, dGeomSphereSetRadius, dGetConfiguration, dHashSpaceCreate, dHashSpaceSetLevels, dInitODE, dJointAttach, dJointCreateContact, dJointDestroy, dJointGroupCreate, dJointGroupDestroy, dJointGroupID, dJointID, dMass, dMassAdd, dMassAdjust, dMassRotate, dMassSetBox, dMassSetBoxTotal, dMassSetCapsule, dMassSetCapsuleTotal, dMassSetCylinder, dMassSetCylinderTotal, dMassSetParameters, dMassSetSphere, dMassSetSphereTotal, dMassSetTrimesh, dMassSetTrimeshTotal, dMassSetZero, dMassTranslate, dNormalize3, dQuadTreeSpaceCreate, dSimpleSpaceCreate, dSpaceAdd, dSpaceCollide, dSpaceCollide2, dSpaceDestroy, dSpaceGetNumGeoms, dSpaceID, dSpaceQuery, dSpaceRemove, dSurfaceParameters, dSweepAndPruneSpaceCreate, dWorldCreate, dWorldDestroy, dWorldExportDIF, dWorldGetAutoDisableFlag, dWorldGetCFM, dWorldGetERP, dWorldGetGravity, dWorldID, dWorldImpulseToForce, dWorldSetAutoDisableFlag, dWorldSetCFM, dWorldSetERP, dWorldSetGravity, dWorldStep};
+use ode_sys::{dBodyAddForce, dBodyAddForceAtPos, dBodyAddForceAtRelPos, dBodyAddRelForce, dBodyAddRelForceAtPos, dBodyAddRelForceAtRelPos, dBodyAddTorque, dBodyCreate, dBodyDestroy, dBodyDisable, dBodyEnable, dBodyGetAngularVel, dBodyGetForce, dBodyGetGravityMode, dBodyGetLinearVel, dBodyGetPosition, dBodyGetQuaternion, dBodyGetRotation, dBodyID, dBodyIsEnabled, dBodyIsKinematic, dBodySetAngularVel, dBodySetDynamic, dBodySetGravityMode, dBodySetKinematic, dBodySetLinearVel, dBodySetMass, dBodySetMovedCallback, dBodySetPosition, dBodySetQuaternion, dBodySetRotation, dCloseODE, dCollide, dContact, dContactGeom, dCreateBox, dCreateCapsule, dCreateCylinder, dCreatePlane, dCreateRay, dCreateSphere, dCreateTriMesh, dGeomBoxSetLengths, dGeomCapsuleSetParams, dGeomClearOffset, dGeomCylinderSetParams, dGeomDestroy, dGeomDisable, dGeomEnable, dGeomGetAABB, dGeomGetBody, dGeomGetOffsetPosition, dGeomGetOffsetQuaternion, dGeomGetOffsetRotation, dGeomGetPosition, dGeomGetQuaternion, dGeomGetRotation, dGeomID, dGeomIsEnabled, dGeomIsSpace, dGeomPlaneSetParams, dGeomRaySet, dGeomRaySetBackfaceCull, dGeomRaySetClosestHit, dGeomRaySetFirstContact, dGeomRaySetLength, dGeomRaySetParams, dGeomSetBody, dGeomSetCategoryBits, dGeomSetCollideBits, dGeomSetOffsetPosition, dGeomSetOffsetQuaternion, dGeomSetOffsetRotation, dGeomSetOffsetWorldPosition, dGeomSetOffsetWorldQuaternion, dGeomSetOffsetWorldRotation, dGeomSetPosition, dGeomSetQuaternion, dGeomSetRotation, dGeomSphereSetRadius, dGeomTriMeshDataBuildSimple, dGeomTriMeshDataCreate, dGeomTriMeshDataDestroy, dGetConfiguration, dHashSpaceCreate, dHashSpaceSetLevels, dInitODE, dJointAttach, dJointCreateContact, dJointDestroy, dJointGroupCreate, dJointGroupDestroy, dJointGroupID, dJointID, dMass, dMassAdd, dMassAdjust, dMassRotate, dMassSetBox, dMassSetBoxTotal, dMassSetCapsule, dMassSetCapsuleTotal, dMassSetCylinder, dMassSetCylinderTotal, dMassSetParameters, dMassSetSphere, dMassSetSphereTotal, dMassSetTrimesh, dMassSetTrimeshTotal, dMassSetZero, dMassTranslate, dNormalize3, dQuadTreeSpaceCreate, dSimpleSpaceCreate, dSpaceAdd, dSpaceCollide, dSpaceCollide2, dSpaceDestroy, dSpaceGetNumGeoms, dSpaceID, dSpaceQuery, dSpaceRemove, dSurfaceParameters, dSweepAndPruneSpaceCreate, dTriMeshDataID, dWorldCreate, dWorldDestroy, dWorldExportDIF, dWorldGetAutoDisableFlag, dWorldGetCFM, dWorldGetERP, dWorldGetGravity, dWorldID, dWorldImpulseToForce, dWorldSetAutoDisableFlag, dWorldSetCFM, dWorldSetERP, dWorldSetGravity, dWorldStep};
 use std::ffi::{c_void, CString};
 use std::marker::PhantomData;
 use std::mem::{transmute, MaybeUninit};
 use std::ptr::{null, null_mut};
 use by_address::ByAddress;
+use csgrs::mesh::Mesh;
 use futures::StreamExt;
+use num_traits::FloatConst;
 use ordermap::OrderSet;
 use crate::phy::{PhyCollisionManager, PhyWorld};
 
@@ -779,6 +782,82 @@ impl OdeTrimesh {
 	// Incomplete; TBD when this is really required, too complicated.
 }
 
+/// Lifetime of only one frame; specialized [OdeTrimesh]
+pub(crate) struct OdeCameraSpace {
+	id: dGeomID,
+	data: dTriMeshDataID,
+}
+
+impl OdeCameraSpace {
+	const ANGLE: f64 = std::f64::consts::PI / 3.; // Rotation about x-axis
+
+	/// Data about a parallelepiped, with an angle used in [`crate::mui::rendering3d`].
+	pub(crate) fn new(center: DVec3, dims: DVec3) -> Self {
+		let z_shift = dims.y / 2.0 * Self::ANGLE.tan();
+		let x_min = center.x - dims.x / 2.0;
+		let x_max = center.x + dims.x / 2.0;
+		let y_min = center.y - dims.y / 2.0;
+		let y_max = center.y + dims.y / 2.0;
+		let z_lower_min = center.y - dims.z / 2.0 - z_shift;
+		let z_upper_min = center.y - dims.z / 2.0 + z_shift;
+		let z_lower_max = center.y + dims.z / 2.0 - z_shift;
+		let z_upper_max = center.y + dims.z / 2.0 + z_shift;
+		let mesh: Mesh<()> = Mesh::polyhedron(&[
+			[x_min, y_min, z_lower_min],
+			[x_min, y_min, z_lower_max],
+			[x_max, y_min, z_lower_max],
+			[x_max, y_min, z_lower_min],
+			[x_max, y_max, z_upper_min],
+			[x_max, y_max, z_upper_max],
+			[x_min, y_max, z_upper_max],
+			[x_min, y_max, z_upper_min],
+		], &[
+			&[0, 1, 2, 3],
+			&[2, 3, 4, 5],
+			&[1, 2, 5, 6],
+			&[0, 1, 6, 7],
+			&[4, 5, 6, 7],
+			&[0, 3, 4, 7],
+		], None).unwrap().triangulate();
+		let vertices = mesh
+			.polygons
+			.iter()
+			.flat_map(|p| [
+				p.vertices[0].pos.iter(),
+				p.vertices[1].pos.iter(),
+				p.vertices[2].pos.iter(),
+			])
+			.flatten()
+			.cloned()
+			.collect::<Vec<_>>();
+		let indices = (0..mesh.polygons.len())
+			.flat_map(|i| {
+				let offset = i as u32 * 3;
+				[offset, offset + 1, offset + 2]
+			})
+			.collect::<Vec<_>>();
+		let data = unsafe { dGeomTriMeshDataCreate() };
+		unsafe { dGeomTriMeshDataBuildSimple(
+			data,
+			vertices.as_ptr(),
+			(vertices.len() / 3) as _,
+			indices.as_ptr(),
+			indices.len() as _,
+		) };
+		Self {
+			id: unsafe { dCreateTriMesh(null_mut(), data, None, None, None) },
+			data,
+		}
+	}
+}
+
+impl Drop for OdeCameraSpace {
+	fn drop(&mut self) {
+		unsafe { dGeomDestroy(self.id) }
+		unsafe { dGeomTriMeshDataDestroy(self.data); }
+	}
+}
+
 pub struct OdeSpace {
 	id: dSpaceID,
 }
@@ -904,10 +983,16 @@ impl OdeSpace {
 		unsafe { dSpaceCollide(self.id, contact_manager as *mut _ as _, Some(near_callback)) }
 	}
 
-	pub fn filter_region_box(&self, region: OdeBox) {
+	pub fn filter_region_box(&self, region: OdeBox) -> HashSet<OdeGeomId> {
 		let mut handle = RegionFiltererHandle::new(region.id);
-		unsafe { dSpaceCollide(self.id, &mut handle as *mut _ as _, Some(region_collision_callback)) }
-		
+		unsafe { dSpaceCollide2(self.id as _, region.id, &mut handle as *mut _ as _, Some(region_collision_callback)) }
+		handle.buf.into_iter().map(|i| OdeGeomId { raw: i }).collect::<HashSet<_>>()
+	}
+
+	pub fn filter_region_space(&self, region: OdeCameraSpace) -> HashSet<OdeGeomId> {
+		let mut handle = RegionFiltererHandle::new(region.id);
+		unsafe { dSpaceCollide2(self.id as _, region.id, &mut handle as *mut _ as _, Some(region_collision_callback)) }
+		handle.buf.into_iter().map(|i| OdeGeomId { raw: i }).collect::<HashSet<_>>()
 	}
 
 	pub fn add(&self, geom: &impl OdeGeom) {
@@ -924,6 +1009,17 @@ impl OdeSpace {
 
 	pub fn get_nums_geom(&self) -> i32 {
 		unsafe { dSpaceGetNumGeoms(self.id) }
+	}
+}
+
+#[derive(PartialEq, Eq, Hash)]
+pub struct OdeGeomId {
+	raw: dGeomID,
+}
+
+impl OdeGeomId {
+	pub fn from_geom<P: OdePlaceabilityMarker>(geom: &dyn OdeGeom<Placeability=P>) -> Self {
+		Self { raw: geom.id() }
 	}
 }
 

@@ -2,15 +2,15 @@
  * SPDX-FileCopyrightText: 2026 TerraModulus Team and Contributors
  * SPDX-License-Identifier: LGPL-3.0-only
  */
-use std::collections::LinkedList;
+use std::collections::{HashSet, LinkedList};
 use std::ops::{Deref, Range, RangeInclusive};
 use std::rc::Rc;
 use by_address::ByAddress;
 use getset::Getters;
 use nalgebra_glm::{DVec3, DVec4};
 use ordermap::OrderSet;
-use crate::phy::ode::{OdeBody, OdeContactManager, OdeHandle, OdePlaceabilityMarker, OdePlane, OdeWorld};
-pub use crate::phy::ode::{OdeBox, OdeGeom, OdeGeomNonPlaceable, OdeGeomPlaceable, OdeMass, OdeNonPlaceableGeom, OdeNonPlaceableMarker, OdePlaceableGeom, OdePlaceableMarker, OdeSpace, OdeSphere};
+use crate::phy::ode::{OdeBody, OdeContactManager, OdeGeomId, OdeHandle, OdePlaceabilityMarker, OdePlane, OdeWorld};
+pub(crate) use crate::phy::ode::{OdeBox, OdeGeom, OdeCameraSpace, OdeGeomNonPlaceable, OdeGeomPlaceable, OdeMass, OdeNonPlaceableGeom, OdeNonPlaceableMarker, OdePlaceableGeom, OdePlaceableMarker, OdeSpace, OdeSphere};
 
 mod ode;
 
@@ -134,6 +134,10 @@ impl TopLevelSpace {
 	pub fn collide(&self, collision_manager: &mut PhyCollisionManager) {
 		self.data.collide(&mut collision_manager.contact_manager)
 	}
+
+	pub fn filter_space(&self, space: OdeCameraSpace) -> HashSet<OdeGeomId> {
+		self.data.filter_region_space(space)
+	}
 }
 
 impl Deref for PhyWorld {
@@ -159,6 +163,32 @@ impl<P: OdePlaceabilityMarker> PhyRawGeom<P> {
 	pub fn new_boxed(geom: Box<dyn OdeGeom<Placeability=P>>) -> Self {
 		Self { data: Rc::new(geom) }
 	}
+}
+
+//noinspection DuplicatedCode
+pub fn filter_phy_raw_geom<P: OdePlaceabilityMarker>(geoms: Vec<(u64, &PhyRawGeom<P>)>, filters: &HashSet<OdeGeomId>)
+	-> Vec<u64> {
+	geoms.into_iter().filter_map(|(i, geom)| {
+		let id = OdeGeomId::from_geom(&**geom.data);
+		if filters.contains(&id) {
+			Some(i)
+		} else {
+			None
+		}
+	}).collect()
+}
+
+//noinspection DuplicatedCode
+pub fn filter_phy_geom(geoms: Vec<(u64, &PhyGeom)>, filters: &HashSet<OdeGeomId>)
+	-> Vec<u64> {
+	geoms.into_iter().filter_map(|(i, geom)| {
+		let id = OdeGeomId::from_geom(&*geom.data);
+		if filters.contains(&id) {
+			Some(i)
+		} else {
+			None
+		}
+	}).collect()
 }
 
 impl<P: OdePlaceabilityMarker> Deref for PhyRawGeom<P> {
