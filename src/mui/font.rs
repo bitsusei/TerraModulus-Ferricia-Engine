@@ -399,8 +399,19 @@ impl GlyphManager {
 			text_renderer,
 			canvas_handle,
 			pos,
+			size: Self::text_ctx_size(ctx),
 		};
 		ctx.buffer.render(unsafe { &mut *font_system }, &mut renderer, ctx.color);
+	}
+
+	fn text_ctx_size(ctx: &TextRenderingContext) -> Vec2 {
+		let mut size = (0.0, 0.0);
+		ctx.buffer.layout_runs().for_each(|r| {
+			if r.line_w > size.0 { size.0 = r.line_w; }
+			let h = r.line_top + r.line_height;
+			if h > size.1 { size.1 = h; }
+		});
+		Vec2::new(size.0, size.1)
 	}
 
 	fn render_glyph(&mut self,
@@ -408,6 +419,7 @@ impl GlyphManager {
 	                text_renderer: &mut TextRenderer,
 	                font_system: &mut FontSystem,
 	                pos: Vec2,
+	                box_size: Vec2,
 	                glyph: PhysicalGlyph,
 	                color: Color,
 	) {
@@ -415,9 +427,15 @@ impl GlyphManager {
 		// Not sure how font size should be computed here.
 		let scale = f32::from_bits(glyph.cache_key.font_size_bits) / GLYPH_RESOLUTION as f32;
 		let size = (rect.bounds.x_max - rect.bounds.x_min, rect.bounds.y_max - rect.bounds.y_min);
+		// Note that rendering coordinates are y-upward while the ones from the library are y-downward.
+		// Since offsets given by the glyph are based on their baseline positions,
+		// coordinates here must be translated for the bottom-left corner by rendering positioning.
 		text_renderer.render_glyph(
 			canvas_handle,
-			(pos.x + glyph.x as f32 + rect.bounds.x_min * scale, pos.y + glyph.y as f32 + rect.bounds.y_min * scale),
+			(
+				pos.x + glyph.x as f32 + rect.bounds.x_min * scale,
+				pos.y + box_size.y - glyph.y as f32 + rect.bounds.y_min * scale,
+			),
 			((size.0 * scale) as _, (size.1 * scale) as _),
 			tex,
 			rect.ctn_rect,
@@ -647,6 +665,7 @@ pub(super) struct GlyphRenderer<'a> {
 	text_renderer: &'a mut TextRenderer,
 	canvas_handle: &'a CanvasHandle,
 	pos: Vec2,
+	size: Vec2,
 }
 
 const GLYPH_RESOLUTION: usize = 32;
@@ -662,6 +681,7 @@ impl Renderer for GlyphRenderer<'_> {
 			self.text_renderer,
 			self.font_system,
 			self.pos,
+			self.size,
 			physical_glyph,
 			color,
 		);
