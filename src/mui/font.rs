@@ -399,19 +399,9 @@ impl GlyphManager {
 			text_renderer,
 			canvas_handle,
 			pos,
-			size: Self::text_ctx_size(ctx),
+			size: ctx.text_ctx_size(),
 		};
 		ctx.buffer.render(unsafe { &mut *font_system }, &mut renderer, ctx.color);
-	}
-
-	fn text_ctx_size(ctx: &TextRenderingContext) -> Vec2 {
-		let mut size = (0.0, 0.0);
-		ctx.buffer.layout_runs().for_each(|r| {
-			if r.line_w > size.0 { size.0 = r.line_w; }
-			let h = r.line_top + r.line_height;
-			if h > size.1 { size.1 = h; }
-		});
-		Vec2::new(size.0, size.1)
 	}
 
 	fn render_glyph(&mut self,
@@ -716,6 +706,21 @@ impl TextRenderingContext<'_> {
 	#[inline]
 	pub(crate) fn set_text(&mut self, text: String) {
 		self.buffer.set_text(&text, &self.attrs, Shaping::Basic, None)
+	}
+	
+	fn text_ctx_size(&self) -> Vec2 {
+		let mut size = (0.0, 0.0);
+		self.buffer.layout_runs().for_each(|r| {
+			if r.line_w > size.0 { size.0 = r.line_w; }
+			let h = r.line_top + r.line_height;
+			if h > size.1 { size.1 = h; }
+		});
+		Vec2::new(size.0, size.1)
+	}
+	
+	pub(crate) fn layout_fetch_size(&mut self, font_manager: &mut FontManager) -> Vec2 {
+		self.buffer.shape_until_scroll(&mut font_manager.font_system, false);
+		self.text_ctx_size()
 	}
 }
 

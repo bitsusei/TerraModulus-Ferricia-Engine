@@ -1052,6 +1052,15 @@ jni_ferricia! {
 }
 
 jni_ferricia! {
+	client:Mui.fetchTextRenderingContextSize(mut env: JNIEnv, class: JClass, handle: jlong, fm_handle: jlong) -> jfloatArray {
+		let r = jni_ref_ptr::<TextRenderingContext>(handle).layout_fetch_size(jni_ref_ptr::<FontManager>(fm_handle));
+		let arr = env.new_float_array(2).expect("Cannot create Java double array");
+		env.set_float_array_region(&arr, 0, &[r.x, r.y]).expect("Cannot set Java double array");
+		arr.into_raw()
+	}
+}
+
+jni_ferricia! {
 	client:Mui.renderText(
 		mut env: JNIEnv,
 		class: JClass,
