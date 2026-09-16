@@ -12,7 +12,7 @@ use bytemuck::cast_slice_box;
 use glow::{Buffer, NativeTexture, NativeVertexArray, Program, Shader, Texture, UniformLocation, VertexArray, ARRAY_BUFFER, DYNAMIC_DRAW, ELEMENT_ARRAY_BUFFER, LINES, STATIC_DRAW, TRIANGLES};
 use image::imageops::flip_vertical_in_place;
 use image::{DynamicImage, ImageBuffer, ImageReader, Rgb, Rgb32FImage, RgbImage, Rgba, Rgba32FImage, RgbaImage};
-use nalgebra_glm::{identity, mat3_to_mat4, ortho, rotation2d, scaling, translation, DVec3, Mat4, TMat4, Vec3, Vec4, Vec2};
+use nalgebra_glm::{identity, mat3_to_mat4, ortho, rotation2d, scaling, translation, DVec3, Mat4, TMat4, Vec3, Vec4, Vec2, IVec2};
 use ordermap::OrderSet;
 use sdl3::pixels::Color;
 use std::any::Any;
@@ -168,6 +168,14 @@ impl CanvasHandle {
 		prim.apply_vao();
 		program.uniform(&self.gl_handle, &self.ortho_proj_mat, model, color, tex_size);
 		prim.draw();
+	}
+
+	pub(crate) fn enable_scissor(&self, pos: IVec2, size: (u32, u32)) {
+		self.gl_handle.enable_scissor(pos, size)
+	}
+	
+	pub(crate) fn disable_scissor(&self) {
+		self.gl_handle.disable_scissor()
 	}
 }
 

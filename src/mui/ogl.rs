@@ -24,8 +24,8 @@
 
 use getset::Getters;
 use gl::{VertexAttrib1d, VertexAttrib1f, VertexAttrib1s, VertexAttrib2d, VertexAttrib2f, VertexAttrib2s, VertexAttrib3d, VertexAttrib3f, VertexAttrib3s, VertexAttrib4Nub, VertexAttrib4d, VertexAttrib4f, VertexAttrib4s, VertexAttribI1i, VertexAttribI1ui, VertexAttribI2i, VertexAttribI2ui, VertexAttribI3i, VertexAttribI3ui, VertexAttribI4i, VertexAttribI4ui};
-use glow::{Buffer, Context, HasContext, PixelUnpackData, Program, Shader, Texture, UniformLocation, VertexArray, BGR, BGRA, BLEND, BYTE, CLAMP_TO_EDGE, COLOR_BUFFER_BIT, COMPUTE_SHADER, DOUBLE, FLOAT, FRAGMENT_SHADER, GEOMETRY_SHADER, INT, LINEAR, MULTISAMPLE, NEAREST, NEAREST_MIPMAP_LINEAR, ONE_MINUS_SRC_ALPHA, RENDERER, RGB, RGB10, RGB10_A2, RGB12, RGB16, RGB16F, RGB32F, RGB8, RGBA, RGBA12, RGBA16, RGBA16F, RGBA32F, RGBA8, SHADING_LANGUAGE_VERSION, SHORT, SRC_ALPHA, SRGB, SRGB8, SRGB8_ALPHA8, SRGB_ALPHA, STREAM_DRAW, TESS_CONTROL_SHADER, TESS_EVALUATION_SHADER, TEXTURE0, TEXTURE_2D, TEXTURE_MAG_FILTER, TEXTURE_MIN_FILTER, TEXTURE_WRAP_S, TEXTURE_WRAP_T, UNPACK_ALIGNMENT, UNSIGNED_BYTE, UNSIGNED_INT, UNSIGNED_SHORT, VENDOR, VERSION, VERTEX_SHADER};
-use nalgebra_glm::{TMat4, UVec2, Vec2, Vec3, Vec4};
+use glow::{Buffer, Context, HasContext, PixelUnpackData, Program, Shader, Texture, UniformLocation, VertexArray, BGR, BGRA, BLEND, BYTE, CLAMP_TO_EDGE, COLOR_BUFFER_BIT, COMPUTE_SHADER, DOUBLE, FLOAT, FRAGMENT_SHADER, GEOMETRY_SHADER, INT, LINEAR, MULTISAMPLE, NEAREST, NEAREST_MIPMAP_LINEAR, ONE_MINUS_SRC_ALPHA, RENDERER, RGB, RGB10, RGB10_A2, RGB12, RGB16, RGB16F, RGB32F, RGB8, RGBA, RGBA12, RGBA16, RGBA16F, RGBA32F, RGBA8, SHADING_LANGUAGE_VERSION, SHORT, SRC_ALPHA, SRGB, SRGB8, SRGB8_ALPHA8, SRGB_ALPHA, STREAM_DRAW, TESS_CONTROL_SHADER, TESS_EVALUATION_SHADER, TEXTURE0, TEXTURE_2D, TEXTURE_MAG_FILTER, TEXTURE_MIN_FILTER, TEXTURE_WRAP_S, TEXTURE_WRAP_T, UNPACK_ALIGNMENT, UNSIGNED_BYTE, UNSIGNED_INT, UNSIGNED_SHORT, VENDOR, VERSION, VERTEX_SHADER, SCISSOR_TEST};
+use nalgebra_glm::{IVec2, TMat4, UVec2, Vec2, Vec3, Vec4};
 use num_traits::{Bounded, Num};
 use regex::Regex;
 use sdl3::video::GLContext;
@@ -395,6 +395,17 @@ impl GLHandle {
 			);
 			tex
 		}
+	}
+
+	pub(super) fn enable_scissor(&self, pos: IVec2, size: (u32, u32)) {
+		unsafe {
+			self.gl.enable(SCISSOR_TEST);
+			self.gl.scissor(pos.x, pos.y, size.0 as _, size.1 as _);
+		}
+	}
+
+	pub(super) fn disable_scissor(&self) {
+		unsafe { self.gl.disable(SCISSOR_TEST); }
 	}
 }
 

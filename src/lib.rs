@@ -40,7 +40,7 @@ use derive_more::From;
 use jni::JNIEnv;
 use jni::objects::{JByteArray, JClass, JDoubleArray, JFloatArray, JIntArray, JLongArray, JObject, JString, ReleaseMode};
 use jni::sys::{jboolean, jbyte, jbyteArray, jdouble, jdoubleArray, jfloat, jfloatArray, jint, jintArray, jlong, jlongArray, jobjectArray, jsize, jstring};
-use nalgebra_glm::{DQuat, DVec3, DVec4, Vec2, Vec3};
+use nalgebra_glm::{DQuat, DVec3, DVec4, IVec2, Vec2, Vec3};
 use paste::paste;
 use sdl3::pixels::Color;
 use std::backtrace::Backtrace;
@@ -1079,6 +1079,22 @@ jni_ferricia! {
 			jni_ref_ptr::<TextRenderingContext>(ctx_handle),
 			Vec2::new(pos[0], pos[1]),
 		)
+	}
+}
+
+jni_ferricia! {
+	client:Mui.enableScissor(mut env: JNIEnv, class: JClass, canvas_handle: jlong, data: jintArray) {
+		jni_get_arr!(arr = JIntArray; data, env);
+		jni_ref_ptr::<CanvasHandle>(canvas_handle).enable_scissor(
+			IVec2::new(arr[0], arr[1]),
+			(arr[2] as _, arr[3] as _),
+		);
+	}
+}
+
+jni_ferricia! {
+	client:Mui.disableScissor(mut env: JNIEnv, class: JClass, canvas_handle: jlong) {
+		jni_ref_ptr::<CanvasHandle>(canvas_handle).disable_scissor();
 	}
 }
 
