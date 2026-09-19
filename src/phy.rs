@@ -10,7 +10,7 @@ use getset::Getters;
 use nalgebra_glm::{DVec3, DVec4};
 use ordermap::OrderSet;
 use crate::phy::ode::{OdeBody, OdeContactManager, OdeGeomId, OdeHandle, OdePlaceabilityMarker, OdePlane, OdeWorld};
-pub(crate) use crate::phy::ode::{OdeBox, OdeGeom, OdeCameraSpace, OdeGeomNonPlaceable, OdeGeomPlaceable, OdeMass, OdeNonPlaceableGeom, OdeNonPlaceableMarker, OdePlaceableGeom, OdePlaceableMarker, OdeSpace, OdeSphere};
+pub(crate) use crate::phy::ode::{OdeBox, OdeGeom, OdeGeomNonPlaceable, OdeGeomPlaceable, OdeMass, OdeNonPlaceableGeom, OdeNonPlaceableMarker, OdePlaceableGeom, OdePlaceableMarker, OdeSpace, OdeSphere};
 
 mod ode;
 
@@ -133,10 +133,6 @@ impl TopLevelSpace {
 
 	pub fn collide(&self, collision_manager: &mut PhyCollisionManager) {
 		self.data.collide(&mut collision_manager.contact_manager)
-	}
-
-	pub fn filter_space(&self, space: OdeCameraSpace) -> HashSet<OdeGeomId> {
-		self.data.filter_region_space(space)
 	}
 }
 

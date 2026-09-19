@@ -11,6 +11,7 @@
 mod mui;
 mod util;
 pub mod phy;
+mod math;
 
 #[cfg(feature = "client")]
 use crate::mui::{
@@ -34,7 +35,7 @@ use crate::mui::{
 	rendering3d::{Camera3d, DrawableWorldObj, GwrGeoProgram, Render3DEfx, Render3dPrimitive, SimpleMesh3dGeom},
 	window::WindowHandle,
 };
-use crate::phy::{filter_phy_raw_geom, OdeBox, OdeCameraSpace, OdeMass, OdeNonPlaceableMarker, OdePlaceableGeom, OdePlaceableMarker, OdeSpace, PhyBody, PhyCollisionManager, PhyEnv, PhyRawGeom, PhyRawGeomPlaceable, PhyWorld};
+use crate::phy::{filter_phy_raw_geom, OdeBox, OdeMass, OdeNonPlaceableMarker, OdePlaceableGeom, OdePlaceableMarker, OdeSpace, PhyBody, PhyCollisionManager, PhyEnv, PhyRawGeom, PhyRawGeomPlaceable, PhyWorld};
 use bytemuck::cast_slice;
 use derive_more::From;
 use jni::JNIEnv;
@@ -50,6 +51,7 @@ use std::fmt::Display;
 use std::panic::{AssertUnwindSafe, catch_unwind, take_hook};
 use std::ptr::{from_raw_parts, null};
 use futures::StreamExt;
+use crate::math::CameraSpace;
 
 #[derive(From)]
 struct FerriciaError(String);
@@ -1099,6 +1101,32 @@ jni_ferricia! {
 }
 
 jni_ferricia! {
+	client:Mui.newCameraSpace(mut env: JNIEnv, class: JClass, data: jdoubleArray) -> jlong {
+		jni_get_arr!(arr = JDoubleArray; data, env);
+		jni_to_ptr(CameraSpace::new(
+			DVec3::new(arr[0], arr[1], arr[2]),
+			DVec3::new(arr[3], arr[4], arr[5]),
+		))
+	}
+}
+
+jni_ferricia! {
+	client:Mui.intersectCameraSpace(mut env: JNIEnv, class: JClass, handle: jlong, data: jdoubleArray) -> jboolean {
+		jni_get_arr!(arr = JDoubleArray; data, env);
+		jni_ref_ptr::<CameraSpace>(handle).intersects(
+			DVec3::new(arr[0], arr[1], arr[2]),
+			DVec3::new(arr[3], arr[4], arr[5]),
+		) as _
+	}
+}
+
+jni_ferricia! {
+	client:Mui.dropCameraSpace(mut env: JNIEnv, class: JClass, handle: jlong) {
+		jni_drop_with_ptr::<CameraSpace>(handle)
+	}
+}
+
+jni_ferricia! {
 	client:Gwr.newCamera(
 		mut env: JNIEnv,
 		class: JClass,
@@ -1247,37 +1275,6 @@ jni_ferricia! {
 jni_ferricia! {
 	Physics.tickPhyWorld(mut env: JNIEnv, class: JClass, handle: jlong, cm_handle: jlong) {
 		jni_ref_ptr::<PhyWorld>(handle).tick(jni_ref_ptr::<PhyCollisionManager>(cm_handle))
-	}
-}
-
-jni_ferricia! {
-	Physics.filterGeoms(mut env: JNIEnv, class: JClass,
-		handle: jlong,
-		data1: jdoubleArray, // len 6
-		data2: jlongArray, // [PhyRawGeom<OdeNonPlaceableMarker>]
-		data3: jlongArray, // [PhyRawGeom<OdePlaceableMarker>]
-		// data4: jlongArray, // [PhyGeom]
-	) -> jlongArray {
-		jni_get_arr!(space = JDoubleArray; data1, env);
-		let filters = jni_ref_ptr::<PhyWorld>(handle).filter_space(OdeCameraSpace::new(
-			DVec3::new(space[0], space[1], space[2]), DVec3::new(space[3], space[4], space[5])
-		));
-		jni_get_arr!(geoms = JLongArray; data2, env);
-		let a1 = filter_phy_raw_geom(
-			geoms.iter().map(|i| (*i as _, &*jni_ref_ptr::<PhyRawGeom<OdeNonPlaceableMarker>>(*i))).collect(),
-			&filters,
-		);
-		jni_get_arr!(geoms = JLongArray; data3, env);
-		let a2 = filter_phy_raw_geom(
-			geoms.iter().map(|i| (*i as _, &*jni_ref_ptr::<PhyRawGeom<OdePlaceableMarker>>(*i))).collect(),
-			&filters,
-		);
-		let arr = env.new_long_array((a1.len() + a2.len()) as _).expect("Cannot create Java long array");
-		env.set_long_array_region(&arr, 0, cast_slice(a1.as_slice()))
-			.expect("Cannot set Java long array");
-		env.set_long_array_region(&arr, a1.len() as _, cast_slice(a2.as_slice()))
-			.expect("Cannot set Java long array");
-		arr.into_raw()
 	}
 }
 

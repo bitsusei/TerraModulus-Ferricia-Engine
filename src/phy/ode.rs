@@ -13,6 +13,7 @@ use std::mem::{transmute, MaybeUninit};
 use std::ptr::{null, null_mut};
 use by_address::ByAddress;
 use csgrs::mesh::Mesh;
+use csgrs::traits::CSG;
 use futures::StreamExt;
 use num_traits::FloatConst;
 use ordermap::OrderSet;
@@ -782,82 +783,6 @@ impl OdeTrimesh {
 	// Incomplete; TBD when this is really required, too complicated.
 }
 
-/// Lifetime of only one frame; specialized [OdeTrimesh]
-pub(crate) struct OdeCameraSpace {
-	id: dGeomID,
-	data: dTriMeshDataID,
-}
-
-impl OdeCameraSpace {
-	const ANGLE: f64 = std::f64::consts::PI / 3.; // Rotation about x-axis
-
-	/// Data about a parallelepiped, with an angle used in [`crate::mui::rendering3d`].
-	pub(crate) fn new(center: DVec3, dims: DVec3) -> Self {
-		let z_shift = dims.y / 2.0 * Self::ANGLE.tan();
-		let x_min = center.x - dims.x / 2.0;
-		let x_max = center.x + dims.x / 2.0;
-		let y_min = center.y - dims.y / 2.0;
-		let y_max = center.y + dims.y / 2.0;
-		let z_lower_min = center.y - dims.z / 2.0 - z_shift;
-		let z_upper_min = center.y - dims.z / 2.0 + z_shift;
-		let z_lower_max = center.y + dims.z / 2.0 - z_shift;
-		let z_upper_max = center.y + dims.z / 2.0 + z_shift;
-		let mesh: Mesh<()> = Mesh::polyhedron(&[
-			[x_min, y_min, z_lower_min],
-			[x_min, y_min, z_lower_max],
-			[x_max, y_min, z_lower_max],
-			[x_max, y_min, z_lower_min],
-			[x_max, y_max, z_upper_min],
-			[x_max, y_max, z_upper_max],
-			[x_min, y_max, z_upper_max],
-			[x_min, y_max, z_upper_min],
-		], &[
-			&[0, 1, 2, 3],
-			&[2, 3, 4, 5],
-			&[1, 2, 5, 6],
-			&[0, 1, 6, 7],
-			&[4, 5, 6, 7],
-			&[0, 3, 4, 7],
-		], None).unwrap().triangulate();
-		let vertices = mesh
-			.polygons
-			.iter()
-			.flat_map(|p| [
-				p.vertices[0].pos.iter(),
-				p.vertices[1].pos.iter(),
-				p.vertices[2].pos.iter(),
-			])
-			.flatten()
-			.cloned()
-			.collect::<Vec<_>>();
-		let indices = (0..mesh.polygons.len())
-			.flat_map(|i| {
-				let offset = i as u32 * 3;
-				[offset, offset + 1, offset + 2]
-			})
-			.collect::<Vec<_>>();
-		let data = unsafe { dGeomTriMeshDataCreate() };
-		unsafe { dGeomTriMeshDataBuildSimple(
-			data,
-			vertices.as_ptr(),
-			(vertices.len() / 3) as _,
-			indices.as_ptr(),
-			indices.len() as _,
-		) };
-		Self {
-			id: unsafe { dCreateTriMesh(null_mut(), data, None, None, None) },
-			data,
-		}
-	}
-}
-
-impl Drop for OdeCameraSpace {
-	fn drop(&mut self) {
-		unsafe { dGeomDestroy(self.id) }
-		unsafe { dGeomTriMeshDataDestroy(self.data); }
-	}
-}
-
 pub struct OdeSpace {
 	id: dSpaceID,
 }
@@ -981,18 +906,6 @@ impl OdeSpace {
 	pub fn collide(&self, contact_manager: &mut OdeContactManager) {
 		contact_manager.joints.clear();
 		unsafe { dSpaceCollide(self.id, contact_manager as *mut _ as _, Some(near_callback)) }
-	}
-
-	pub fn filter_region_box(&self, region: OdeBox) -> HashSet<OdeGeomId> {
-		let mut handle = RegionFiltererHandle::new(region.id);
-		unsafe { dSpaceCollide2(self.id as _, region.id, &mut handle as *mut _ as _, Some(region_collision_callback)) }
-		handle.buf.into_iter().map(|i| OdeGeomId { raw: i }).collect::<HashSet<_>>()
-	}
-
-	pub fn filter_region_space(&self, region: OdeCameraSpace) -> HashSet<OdeGeomId> {
-		let mut handle = RegionFiltererHandle::new(region.id);
-		unsafe { dSpaceCollide2(self.id as _, region.id, &mut handle as *mut _ as _, Some(region_collision_callback)) }
-		handle.buf.into_iter().map(|i| OdeGeomId { raw: i }).collect::<HashSet<_>>()
 	}
 
 	pub fn add(&self, geom: &impl OdeGeom) {
