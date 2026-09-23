@@ -35,7 +35,7 @@ use crate::mui::{
 	rendering3d::{Camera3d, DrawableWorldObj, GwrGeoProgram, Render3DEfx, Render3dPrimitive, SimpleMesh3dGeom},
 	window::WindowHandle,
 };
-use crate::phy::{filter_phy_raw_geom, OdeBox, OdeMass, OdeNonPlaceableMarker, OdePlaceableGeom, OdePlaceableMarker, OdeSpace, PhyBody, PhyCollisionManager, PhyEnv, PhyRawGeom, PhyRawGeomPlaceable, PhyWorld};
+use crate::phy::{filter_phy_raw_geom, OdeBox, OdeMass, OdeNonPlaceableMarker, OdePlaceableGeom, OdePlaceableMarker, OdeSpace, PhyBody, PhyCollisionManager, PhyEnv, PhyRawGeom, PhyRawGeomPlaceable, PhyWorld, StaticSpaceSet};
 use bytemuck::cast_slice;
 use derive_more::From;
 use jni::JNIEnv;
@@ -1288,7 +1288,7 @@ jni_ferricia! {
 
 jni_ferricia! {
 	Physics.newPhyWorldSpace(mut env: JNIEnv, class: JClass, handle: jlong) -> jlong {
-		jni_to_ptr(jni_ref_ptr::<PhyWorld>(handle).create_space(2..=12))
+		jni_to_ptr(jni_ref_ptr::<PhyWorld>(handle).create_space(0..=4))
 	}
 }
 
@@ -1368,6 +1368,13 @@ jni_ferricia! {
 }
 
 jni_ferricia! {
+	Physics.newSolePhyGeomBox(mut env: JNIEnv, class: JClass, lengths: jdoubleArray) -> jlong {
+		jni_get_arr!(arr = JDoubleArray; lengths, env);
+		jni_to_ptr(PhyRawGeom::new(OdeBox::new(None, DVec3::new(arr[0], arr[1], arr[2]))))
+	}
+}
+
+jni_ferricia! {
 	Physics.newWorldPhyGeomSphere(mut env: JNIEnv, class: JClass, handle: jlong, radius: jdouble) -> jlong {
 		jni_to_ptr(PhyRawGeom::new(
 			jni_ref_ptr::<PhyWorld>(handle).space().create_sphere(radius)
@@ -1415,5 +1422,29 @@ jni_ferricia! {
 		let arr = env.new_double_array(3).expect("Cannot create Java double array");
 		env.set_double_array_region(&arr, 0, r).expect("Cannot set Java double array");
 		arr.into_raw()
+	}
+}
+
+jni_ferricia! {
+	Physics.newPhyWorldStaticSpaceSet(mut env: JNIEnv, class: JClass, handle: jlong) -> jlong {
+		jni_to_ptr(jni_ref_ptr::<PhyWorld>(handle).create_static_space_set(0..=4))
+	}
+}
+
+jni_ferricia! {
+	Physics.addStaticSpaceSetGeom(mut env: JNIEnv, class: JClass, set_handle: jlong, geom_handle: jlong) {
+		jni_ref_ptr::<StaticSpaceSet>(set_handle).add_geom(jni_ref_ptr::<PhyRawGeomPlaceable>(geom_handle))
+	}
+}
+
+jni_ferricia! {
+	Physics.removeStaticSpaceSetGeom(mut env: JNIEnv, class: JClass, set_handle: jlong, geom_handle: jlong) {
+		jni_ref_ptr::<StaticSpaceSet>(set_handle).remove_geom(jni_ref_ptr::<PhyRawGeomPlaceable>(geom_handle))
+	}
+}
+
+jni_ferricia! {
+	Physics.updateStaticSpaceSetIgnored(mut env: JNIEnv, class: JClass, set_handle: jlong, cm_handle: jlong) {
+		jni_ref_ptr::<StaticSpaceSet>(set_handle).update_ignored(jni_ref_ptr::<PhyCollisionManager>(cm_handle))
 	}
 }

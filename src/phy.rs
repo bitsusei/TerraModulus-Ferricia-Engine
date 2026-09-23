@@ -2,12 +2,12 @@
  * SPDX-FileCopyrightText: 2026 TerraModulus Team and Contributors
  * SPDX-License-Identifier: LGPL-3.0-only
  */
-use std::collections::{HashSet, LinkedList};
+use std::collections::{HashMap, HashSet, LinkedList};
 use std::ops::{Deref, Range, RangeInclusive};
 use std::rc::Rc;
 use by_address::ByAddress;
 use getset::Getters;
-use nalgebra_glm::{DVec3, DVec4};
+use nalgebra_glm::{DVec3, DVec4, IVec3};
 use ordermap::OrderSet;
 use crate::phy::ode::{OdeBody, OdeContactManager, OdeGeomId, OdeHandle, OdePlaceabilityMarker, OdePlane, OdeWorld};
 pub(crate) use crate::phy::ode::{OdeBox, OdeGeom, OdeGeomNonPlaceable, OdeGeomPlaceable, OdeMass, OdeNonPlaceableGeom, OdeNonPlaceableMarker, OdePlaceableGeom, OdePlaceableMarker, OdeSpace, OdeSphere};
@@ -107,7 +107,7 @@ pub struct TopLevelSpace {
 impl TopLevelSpace {
 	pub fn new() -> Self {
 		Self {
-			data: OdeSpace::new_hash(None, 4, 12)
+			data: OdeSpace::new_hash(None, 0, 4)
 		}
 	}
 
@@ -131,8 +131,56 @@ impl TopLevelSpace {
 		OdeSpace::new_hash(Some(&self.data), *range.start(), *range.end())
 	}
 
+	pub fn create_static_space_set(&self, range: impl Into<RangeInclusive<i32>>) -> StaticSpaceSet {
+		StaticSpaceSet::new(&self.data, range)
+	}
+
 	pub fn collide(&self, collision_manager: &mut PhyCollisionManager) {
 		self.data.collide(&mut collision_manager.contact_manager)
+	}
+}
+
+const CHUNKS_SIZE: u32 = 32;
+
+pub(crate) struct StaticSpaceSet {
+	parent: OdeSpace,
+	range: RangeInclusive<i32>,
+	spaces: HashMap<IVec3, OdeSpace>,
+	removed_spaces: Vec<OdeSpace>,
+}
+
+impl StaticSpaceSet {
+	pub(crate) fn new(parent: &OdeSpace, range: impl Into<RangeInclusive<i32>>) -> Self {
+		let range = range.into();
+		Self {
+			parent: OdeSpace::new_hash(Some(parent), *range.start(), *range.end()),
+			spaces: HashMap::new(),
+			removed_spaces: Vec::new(),
+			range,
+		}
+	}
+
+	pub(crate) fn add_geom(&mut self, geom: &PhyRawGeom<OdePlaceableMarker>) {
+		self.spaces.entry(IVec3::from(geom.data.get_position().map(|v| (v / CHUNKS_SIZE as f64) as i32)))
+			.or_insert_with(|| OdeSpace::new_hash(Some(&self.parent), *self.range.start(), *self.range.end()))
+			.add(&**geom.data);
+	}
+
+	pub(crate) fn update_ignored(&mut self, cm: &mut PhyCollisionManager) {
+		cm.omit_space(&self.parent);
+		self.removed_spaces.drain(..).for_each(|space| cm.contact_manager.remove_space(&space));
+		self.spaces.values().for_each(|space| cm.contact_manager.omit_space(&space));
+	}
+
+	pub(crate) fn remove_geom(&mut self, geom: &PhyRawGeom<OdePlaceableMarker>) {
+		let k = IVec3::from(geom.data.get_position().map(|v| (v / CHUNKS_SIZE as f64) as i32));
+		debug_assert!(self.spaces.contains_key(&k));
+		if let Some(space) = self.spaces.get(&k) {
+			space.remove(&**geom.data);
+			if space.get_nums_geom() == 0 {
+				self.removed_spaces.push(self.spaces.remove(&k).unwrap());
+			}
+		}
 	}
 }
 

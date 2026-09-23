@@ -11,6 +11,7 @@ use std::ffi::{c_void, CString};
 use std::marker::PhantomData;
 use std::mem::{transmute, MaybeUninit};
 use std::ptr::{null, null_mut};
+use std::time::Instant;
 use by_address::ByAddress;
 use csgrs::mesh::Mesh;
 use csgrs::traits::CSG;
@@ -819,7 +820,8 @@ unsafe extern "C" fn near_callback(data: *mut c_void, o1: dGeomID, o2: dGeomID) 
 				(false, false) => vec![],
 			} {
 				let v = ByAddress(Box::new(space as _));
-				if contact_manager.omitted_spaces.contains(&v) { break }
+				if contact_manager.omitted_spaces.contains(&v) { continue }
+				println!("{:?}", space);
 				// collide all geoms internal to the space(s)
 				dSpaceCollide(space as _, data, Some(near_callback));
 			}
@@ -845,8 +847,10 @@ unsafe extern "C" fn near_callback(data: *mut c_void, o1: dGeomID, o2: dGeomID) 
 			}
 			if (g1.is_none() || g1.is_some() && !is_moving(g1.unwrap())) &&
 				(g2.is_none() || g2.is_some() && !is_moving(g2.unwrap())) { return }
+			let start = Instant::now();
 			let mut contact_array = [const { MaybeUninit::uninit() }; MAX_CONTACTS as _];
 			let num_contact = dCollide(o1, o2, MAX_CONTACTS as _, contact_array[0].as_mut_ptr(), size_of::<dContactGeom>() as _);
+			println!("{:?}", start.elapsed());
 			// add these contact points to the simulation ...
 			let contact_manager = &mut *(data as *mut OdeContactManager);
 			contact_array[0..(num_contact as _)]
@@ -908,15 +912,15 @@ impl OdeSpace {
 		unsafe { dSpaceCollide(self.id, contact_manager as *mut _ as _, Some(near_callback)) }
 	}
 
-	pub fn add(&self, geom: &impl OdeGeom) {
+	pub fn add(&self, geom: &(impl OdeGeom + ?Sized)) {
 		unsafe { dSpaceAdd(self.id, geom.id()) }
 	}
 
-	pub fn remove(&self, geom: &impl OdeGeom) {
+	pub fn remove(&self, geom: &(impl OdeGeom + ?Sized)) {
 		unsafe { dSpaceRemove(self.id, geom.id()) }
 	}
 
-	pub fn query(&self, geom: &impl OdeGeom) -> i32 {
+	pub fn query(&self, geom: &(impl OdeGeom + ?Sized)) -> i32 {
 		unsafe { dSpaceQuery(self.id, geom.id()) }
 	}
 
@@ -1015,6 +1019,11 @@ impl OdeContactManager {
 
 	pub fn omit_space(&mut self, space: &OdeSpace) {
 		self.omitted_spaces.insert(ByAddress(Box::new(space.id)));
+	}
+
+	pub fn remove_space(&mut self, space: &OdeSpace) {
+		let v = ByAddress(Box::new(space.id));
+		self.omitted_spaces.remove(&v);
 	}
 
 	pub(super) fn process(&mut self, world: &OdeWorld) {
