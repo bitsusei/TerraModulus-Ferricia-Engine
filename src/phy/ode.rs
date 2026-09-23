@@ -2,23 +2,18 @@
  * SPDX-FileCopyrightText: 2026 TerraModulus Team and Contributors
  * SPDX-License-Identifier: LGPL-3.0-only
  */
-use std::collections::HashSet;
 use crate::util::{concat_arrays, create_file_c, str_from_c};
-use getset::{Getters, MutGetters};
-use nalgebra_glm::{DMat3, DMat4, DMat4x3, DQuat, DVec3, DVec4};
-use ode_sys::{dBodyAddForce, dBodyAddForceAtPos, dBodyAddForceAtRelPos, dBodyAddRelForce, dBodyAddRelForceAtPos, dBodyAddRelForceAtRelPos, dBodyAddTorque, dBodyCreate, dBodyDestroy, dBodyDisable, dBodyEnable, dBodyGetAngularVel, dBodyGetForce, dBodyGetGravityMode, dBodyGetLinearVel, dBodyGetPosition, dBodyGetQuaternion, dBodyGetRotation, dBodyID, dBodyIsEnabled, dBodyIsKinematic, dBodySetAngularVel, dBodySetDynamic, dBodySetGravityMode, dBodySetKinematic, dBodySetLinearVel, dBodySetMass, dBodySetMovedCallback, dBodySetPosition, dBodySetQuaternion, dBodySetRotation, dCloseODE, dCollide, dContact, dContactGeom, dCreateBox, dCreateCapsule, dCreateCylinder, dCreatePlane, dCreateRay, dCreateSphere, dCreateTriMesh, dGeomBoxSetLengths, dGeomCapsuleSetParams, dGeomClearOffset, dGeomCylinderSetParams, dGeomDestroy, dGeomDisable, dGeomEnable, dGeomGetAABB, dGeomGetBody, dGeomGetOffsetPosition, dGeomGetOffsetQuaternion, dGeomGetOffsetRotation, dGeomGetPosition, dGeomGetQuaternion, dGeomGetRotation, dGeomID, dGeomIsEnabled, dGeomIsSpace, dGeomPlaneSetParams, dGeomRaySet, dGeomRaySetBackfaceCull, dGeomRaySetClosestHit, dGeomRaySetFirstContact, dGeomRaySetLength, dGeomRaySetParams, dGeomSetBody, dGeomSetCategoryBits, dGeomSetCollideBits, dGeomSetOffsetPosition, dGeomSetOffsetQuaternion, dGeomSetOffsetRotation, dGeomSetOffsetWorldPosition, dGeomSetOffsetWorldQuaternion, dGeomSetOffsetWorldRotation, dGeomSetPosition, dGeomSetQuaternion, dGeomSetRotation, dGeomSphereSetRadius, dGeomTriMeshDataBuildSimple, dGeomTriMeshDataCreate, dGeomTriMeshDataDestroy, dGetConfiguration, dHashSpaceCreate, dHashSpaceSetLevels, dInitODE, dJointAttach, dJointCreateContact, dJointDestroy, dJointGroupCreate, dJointGroupDestroy, dJointGroupID, dJointID, dMass, dMassAdd, dMassAdjust, dMassRotate, dMassSetBox, dMassSetBoxTotal, dMassSetCapsule, dMassSetCapsuleTotal, dMassSetCylinder, dMassSetCylinderTotal, dMassSetParameters, dMassSetSphere, dMassSetSphereTotal, dMassSetTrimesh, dMassSetTrimeshTotal, dMassSetZero, dMassTranslate, dNormalize3, dQuadTreeSpaceCreate, dSimpleSpaceCreate, dSpaceAdd, dSpaceCollide, dSpaceCollide2, dSpaceDestroy, dSpaceGetNumGeoms, dSpaceID, dSpaceQuery, dSpaceRemove, dSurfaceParameters, dSweepAndPruneSpaceCreate, dTriMeshDataID, dWorldCreate, dWorldDestroy, dWorldExportDIF, dWorldGetAutoDisableFlag, dWorldGetCFM, dWorldGetERP, dWorldGetGravity, dWorldID, dWorldImpulseToForce, dWorldSetAutoDisableFlag, dWorldSetCFM, dWorldSetERP, dWorldSetGravity, dWorldStep};
-use std::ffi::{c_void, CString};
-use std::marker::PhantomData;
-use std::mem::{transmute, MaybeUninit};
-use std::ptr::{null, null_mut};
-use std::time::Instant;
-use by_address::ByAddress;
-use csgrs::mesh::Mesh;
 use csgrs::traits::CSG;
 use futures::StreamExt;
+use getset::{Getters, MutGetters};
+use nalgebra_glm::{DMat3, DMat4, DMat4x3, DQuat, DVec3, DVec4};
 use num_traits::FloatConst;
+use ode_sys::{dBodyAddForce, dBodyAddForceAtPos, dBodyAddForceAtRelPos, dBodyAddRelForce, dBodyAddRelForceAtPos, dBodyAddRelForceAtRelPos, dBodyAddTorque, dBodyCreate, dBodyDestroy, dBodyDisable, dBodyEnable, dBodyGetAngularVel, dBodyGetForce, dBodyGetGravityMode, dBodyGetLinearVel, dBodyGetPosition, dBodyGetQuaternion, dBodyGetRotation, dBodyID, dBodyIsEnabled, dBodyIsKinematic, dBodySetAngularVel, dBodySetDynamic, dBodySetGravityMode, dBodySetKinematic, dBodySetLinearVel, dBodySetMass, dBodySetMovedCallback, dBodySetPosition, dBodySetQuaternion, dBodySetRotation, dCloseODE, dCollide, dContact, dContactGeom, dCreateBox, dCreateCapsule, dCreateCylinder, dCreatePlane, dCreateRay, dCreateSphere, dGeomBoxSetLengths, dGeomCapsuleSetParams, dGeomClearOffset, dGeomCylinderSetParams, dGeomDestroy, dGeomDisable, dGeomEnable, dGeomGetAABB, dGeomGetBody, dGeomGetOffsetPosition, dGeomGetOffsetQuaternion, dGeomGetOffsetRotation, dGeomGetPosition, dGeomGetQuaternion, dGeomGetRotation, dGeomID, dGeomIsEnabled, dGeomIsSpace, dGeomPlaneSetParams, dGeomRaySet, dGeomRaySetBackfaceCull, dGeomRaySetClosestHit, dGeomRaySetFirstContact, dGeomRaySetLength, dGeomRaySetParams, dGeomSetBody, dGeomSetCategoryBits, dGeomSetCollideBits, dGeomSetOffsetPosition, dGeomSetOffsetQuaternion, dGeomSetOffsetRotation, dGeomSetOffsetWorldPosition, dGeomSetOffsetWorldQuaternion, dGeomSetOffsetWorldRotation, dGeomSetPosition, dGeomSetQuaternion, dGeomSetRotation, dGeomSphereSetRadius, dGetConfiguration, dHashSpaceCreate, dHashSpaceSetLevels, dInitODE, dJointAttach, dJointCreateContact, dJointDestroy, dJointID, dMass, dMassAdd, dMassAdjust, dMassRotate, dMassSetBox, dMassSetBoxTotal, dMassSetCapsule, dMassSetCapsuleTotal, dMassSetCylinder, dMassSetCylinderTotal, dMassSetParameters, dMassSetSphere, dMassSetSphereTotal, dMassSetTrimesh, dMassSetTrimeshTotal, dMassSetZero, dMassTranslate, dNormalize3, dQuadTreeSpaceCreate, dSimpleSpaceCreate, dSpaceAdd, dSpaceCollide, dSpaceCollide2, dSpaceDestroy, dSpaceGetNumGeoms, dSpaceID, dSpaceQuery, dSpaceRemove, dSurfaceParameters, dSweepAndPruneSpaceCreate, dWorldCreate, dWorldDestroy, dWorldExportDIF, dWorldGetAutoDisableFlag, dWorldGetCFM, dWorldGetERP, dWorldGetGravity, dWorldID, dWorldImpulseToForce, dWorldSetAutoDisableFlag, dWorldSetCFM, dWorldSetERP, dWorldSetGravity, dWorldStep};
 use ordermap::OrderSet;
-use crate::phy::{PhyCollisionManager, PhyWorld};
+use std::ffi::{CString, c_void};
+use std::marker::PhantomData;
+use std::mem::{MaybeUninit, transmute};
+use std::ptr::null_mut;
 
 pub(super) struct OdeHandle {
 	_private: PhantomData<()>,
@@ -819,9 +814,7 @@ unsafe extern "C" fn near_callback(data: *mut c_void, o1: dGeomID, o2: dGeomID) 
 				(false, true) => vec![o2],
 				(false, false) => vec![],
 			} {
-				let v = ByAddress(Box::new(space as _));
-				if contact_manager.omitted_spaces.contains(&v) { continue }
-				println!("{:?}", space);
+				if contact_manager.omitted_spaces.contains(&(space as dSpaceID)) { continue }
 				// collide all geoms internal to the space(s)
 				dSpaceCollide(space as _, data, Some(near_callback));
 			}
@@ -847,10 +840,8 @@ unsafe extern "C" fn near_callback(data: *mut c_void, o1: dGeomID, o2: dGeomID) 
 			}
 			if (g1.is_none() || g1.is_some() && !is_moving(g1.unwrap())) &&
 				(g2.is_none() || g2.is_some() && !is_moving(g2.unwrap())) { return }
-			let start = Instant::now();
 			let mut contact_array = [const { MaybeUninit::uninit() }; MAX_CONTACTS as _];
 			let num_contact = dCollide(o1, o2, MAX_CONTACTS as _, contact_array[0].as_mut_ptr(), size_of::<dContactGeom>() as _);
-			println!("{:?}", start.elapsed());
 			// add these contact points to the simulation ...
 			let contact_manager = &mut *(data as *mut OdeContactManager);
 			contact_array[0..(num_contact as _)]
@@ -994,7 +985,7 @@ pub struct OdeContactManager {
 	friction: f64,
 	buf: Vec<OdeContactParams>,
 	joints: Vec<OdeJoint>,
-	omitted_spaces: OrderSet<ByAddress<Box<dSpaceID>>>,
+	omitted_spaces: OrderSet<dSpaceID>,
 }
 
 impl Default for OdeContactManager {
@@ -1018,12 +1009,11 @@ impl OdeContactManager {
 	}
 
 	pub fn omit_space(&mut self, space: &OdeSpace) {
-		self.omitted_spaces.insert(ByAddress(Box::new(space.id)));
+		self.omitted_spaces.insert(space.id);
 	}
 
 	pub fn remove_space(&mut self, space: &OdeSpace) {
-		let v = ByAddress(Box::new(space.id));
-		self.omitted_spaces.remove(&v);
+		self.omitted_spaces.remove(&space.id);
 	}
 
 	pub(super) fn process(&mut self, world: &OdeWorld) {
