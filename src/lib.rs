@@ -1331,6 +1331,25 @@ jni_ferricia! {
 }
 
 jni_ferricia! {
+	Physics.setPhyGeomOffsetPos(mut env: JNIEnv, class: JClass, handle: jlong, data: jdoubleArray) {
+		jni_get_arr!(arr = JDoubleArray; data, env);
+		unsafe { jni_ref_ptr::<PhyRawGeomPlaceable>(handle).set_offset_position(arr[0], arr[1], arr[2]) }
+	}
+}
+
+jni_ferricia! {
+	Physics.getPhyGeomPos(mut env: JNIEnv, class: JClass, handle: jlong) -> jdoubleArray {
+		let geom = jni_ref_ptr::<PhyRawGeomPlaceable>(handle);
+		let r0 = unsafe { geom.get_position() };
+		let r1 = unsafe { geom.get_offset_position() };
+		let arr = env.new_double_array(3).expect("Cannot create Java double array");
+		let r = r0.iter().zip(r1.iter()).map(|(a, b)| *a + *b).collect::<Box<_>>();
+		env.set_double_array_region(&arr, 0, &r).expect("Cannot set Java double array");
+		arr.into_raw()
+	}
+}
+
+jni_ferricia! {
 	Physics.getPhyBodyPos(mut env: JNIEnv, class: JClass, handle: jlong) -> jdoubleArray {
 		let r = unsafe { jni_ref_ptr::<PhyBody>(handle).get_position() };
 		let arr = env.new_double_array(3).expect("Cannot create Java double array");
