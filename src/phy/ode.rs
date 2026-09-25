@@ -851,6 +851,7 @@ unsafe extern "C" fn near_callback(data: *mut c_void, o1: dGeomID, o2: dGeomID) 
 					!is_zero(dBodyGetLinearVel(body)) || !is_zero(dBodyGetForce(body))
 				}
 			}
+			if g1 == g2 { return }
 			if (g1.is_none() || g1.is_some() && !is_moving(g1.unwrap())) &&
 				(g2.is_none() || g2.is_some() && !is_moving(g2.unwrap())) { return }
 			let mut contact_array = [const { MaybeUninit::uninit() }; MAX_CONTACTS as _];
