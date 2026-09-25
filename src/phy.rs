@@ -89,8 +89,12 @@ impl PhyWorld {
 		self.data.set_gravity(x, y, z);
 	}
 
-	pub fn new_body(&self, mass: OdeMass) -> PhyBody {
-		PhyBody::new_body(&self.data, mass)
+	pub fn new_mass_body(&self, mass: OdeMass) -> PhyBody {
+		PhyBody::new_mass_body(&self.data, mass)
+	}
+
+	pub fn new_kinematic_body(&self) -> PhyBody {
+		PhyBody::new_kinematic_body(&self.data)
 	}
 
 	pub fn tick(&self, collision_manager: &mut PhyCollisionManager) {
@@ -251,9 +255,16 @@ pub struct PhyBody {
 }
 
 impl PhyBody {
-	fn new_body(world: &OdeWorld, mass: OdeMass) -> Self {
+	fn new_mass_body(world: &OdeWorld, mass: OdeMass) -> Self {
 		Self {
-			data: Some(world.new_body(mass)),
+			data: Some(world.new_mass_body(mass)),
+			geoms: OrderSet::default(),
+		}
+	}
+
+	fn new_kinematic_body(world: &OdeWorld) -> Self {
+		Self {
+			data: Some(world.new_kinematic_body()),
 			geoms: OrderSet::default(),
 		}
 	}

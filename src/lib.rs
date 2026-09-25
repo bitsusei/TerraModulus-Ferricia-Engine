@@ -1294,7 +1294,13 @@ jni_ferricia! {
 
 jni_ferricia! {
 	Physics.newPhyBody(mut env: JNIEnv, class: JClass, handle: jlong, mass_handle: jlong) -> jlong {
-		jni_to_ptr(jni_ref_ptr::<PhyWorld>(handle).new_body(jni_from_ptr(mass_handle)))
+		jni_to_ptr(jni_ref_ptr::<PhyWorld>(handle).new_mass_body(jni_from_ptr(mass_handle)))
+	}
+}
+
+jni_ferricia! {
+	Physics.newKinematicPhyBody(mut env: JNIEnv, class: JClass, handle: jlong) -> jlong {
+		jni_to_ptr(jni_ref_ptr::<PhyWorld>(handle).new_kinematic_body())
 	}
 }
 

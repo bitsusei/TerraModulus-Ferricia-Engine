@@ -46,13 +46,17 @@ pub(super) struct OdeWorld {
 
 impl OdeWorld {
 	fn new() -> Self {
-		Self {
-			id: unsafe { dWorldCreate() }
-		}
+		let id = unsafe { dWorldCreate() };
+		unsafe { dWorldSetERP(id, 0.4) }
+		Self { id }
 	}
 
-	pub(crate) fn new_body(&self, mass: OdeMass) -> OdeBody {
-		OdeBody::new(self.id, mass)
+	pub(crate) fn new_mass_body(&self, mass: OdeMass) -> OdeBody {
+		OdeBody::new_mass(self.id, mass)
+	}
+
+	pub(crate) fn new_kinematic_body(&self) -> OdeBody {
+		OdeBody::new_kinematic(self.id)
 	}
 
 	pub fn set_gravity(&self, x: f64, y: f64, z: f64) {
@@ -110,7 +114,7 @@ impl OdeWorld {
 
 	/// `mass` must not be moved afterwards.
 	pub fn create_body(&self, mass: OdeMass) -> OdeBody {
-		OdeBody::new(self.id, mass)
+		OdeBody::new_mass(self.id, mass)
 	}
 
 	pub fn new_joint_contact(&self, contact: OdeContact) -> OdeJoint {
@@ -137,17 +141,26 @@ pub(super) struct OdeBody {
 	id: dBodyID,
 	/// [`set_mass`][Self::set_mass] must be called whenever mutation is made.
 	#[getset(get = "pub", get_mut = "pub")]
-	mass: OdeMass,
+	mass: Option<OdeMass>,
 }
 
 impl OdeBody {
 	/// `mass` must not be moved afterwards.
-	fn new(world: dWorldID, mass: OdeMass) -> Self {
+	fn new_mass(world: dWorldID, mass: OdeMass) -> Self {
 		let body = Self {
 			id: unsafe { dBodyCreate(world) },
-			mass,
+			mass: Some(mass),
 		};
 		body.set_mass();
+		body
+	}
+
+	fn new_kinematic(world: dWorldID) -> Self {
+		let body = Self {
+			id: unsafe { dBodyCreate(world) },
+			mass: None,
+		};
+		body.set_kinematic();
 		body
 	}
 
@@ -194,7 +207,7 @@ impl OdeBody {
 	/// This must be called whenever mutation to `self.mass` is done to sync value.
 	pub fn set_mass(&self) {
 		// This copies `self.mass` to ODE's dBody
-		unsafe { dBodySetMass(self.id, &raw const self.mass.data); }
+		unsafe { dBodySetMass(self.id, &raw const self.mass.as_ref().expect("self.mass should be set").data); }
 	}
 
 	pub fn add_force(&self, fx: f64, fy: f64, fz: f64) {
