@@ -37,20 +37,20 @@
 //! including "2.5D" objects (most likely particles) where the 2D textures always face to the camera.
 //!
 //! [Canvas]: super::rendering::CanvasHandle
-use std::any::Any;
-use std::num::NonZeroU32;
-use crate::mui::ogl::{GLHandle, NumType, ShaderType, VertexAttrVariant};
-use crate::mui::rendering::{compile_shader_from};
 use crate::FerriciaResult;
+use crate::mui::ogl::{GLHandle, NumType, ShaderType, VertexAttrVariant};
+use crate::mui::rendering::compile_shader_from;
 use array_macro::array;
 use csgrs::mesh::Mesh;
 use csgrs::traits::CSG;
 use gl::{ARRAY_BUFFER, DYNAMIC_DRAW, ELEMENT_ARRAY_BUFFER, LINES, STATIC_DRAW, TRIANGLES};
-use nalgebra_glm::{identity, look_at, quat_to_mat4, scale, scaling, translate, translation, DMat4, DQuat, DVec3, Mat4, Vec3, Vec4};
-use sdl3::pixels::Color;
-use std::sync::LazyLock;
 use glow::{Buffer, NativeVertexArray, Program, UniformLocation, VertexArray};
+use nalgebra_glm::{DMat4, DQuat, DVec3, Mat4, Vec3, identity, ortho, quat_to_mat4, scaling, translation};
 use num_traits::FloatConst;
+use sdl3::pixels::Color;
+use std::any::Any;
+use std::num::NonZeroU32;
+use std::sync::LazyLock;
 
 static IDENT_MAT_4: LazyLock<Mat4> = LazyLock::new(identity);
 /// It should be rotating about x-axis with -60 degrees, but somehow this function is treating
@@ -59,29 +59,66 @@ static IDENT_MAT_4: LazyLock<Mat4> = LazyLock::new(identity);
 static CAMERA_DIR: LazyLock<DMat4> = LazyLock::new(|| DMat4::new_rotation(DVec3::new(f64::PI() / 3., 0., 0.)));
 /// The direction of light pointing South with 45 degrees of depression.
 static LIGHT_DIR: LazyLock<Vec3> = LazyLock::new(|| Vec3::new(0., -1., 1.).normalize());
+/// pixels per meter
 static STANDARD_SCALING: f32 = 64.;
 
 pub(crate) struct Camera3d {
-	proj_mat: Mat4,
+	proj_mat: Option<Mat4>,
 	view_mat: Mat4,
 	canvas_size: (u32, u32),
 	zoom_level: f32,
+	space: Option<CameraSpace>,
 }
 
 impl Camera3d {
 	/// Position is the position where the Camera is at (position of the Player character).
 	pub(super) fn new(canvas_size: (u32, u32), pos: Vec3) -> Self {
 		Self {
-			proj_mat: ortho_proj_mat(canvas_size, STANDARD_SCALING),
+			proj_mat: None,
 			view_mat: look_view_mat(pos),
 			canvas_size,
 			zoom_level: 1.0,
+			space: None,
 		}
 	}
 
+	fn compute_ortho_proj_mat(&mut self) {
+		let (width, height) = self.canvas_size;
+		let scale = self.zoom_level * STANDARD_SCALING;
+		let scale = Vec3::new(scale, scale, 0.).cast();
+		// Centering offset of Camera
+		let offset = DVec3::new(width as f64 / 2., height as f64 / 2., 0.);
+		let space = self.space.as_ref().expect("self.space should have been set");
+		self.proj_mat = Some((
+			ortho(0., width as _, 0., height as _, -space.ceil_level, space.floor_level) *
+				translation(&offset) * scaling(&scale)
+		).cast());
+	}
+
+	pub(crate) fn set_camera_space(&mut self,
+	                               ceil_level: f64,
+	                               floor_level: f64,
+	                               near_threshold: f32,
+	                               far_threshold: f32,
+	                               fog_color: (u8, u8, u8),
+	) {
+		self.space = Some(CameraSpace {
+			ceil_level,
+			floor_level,
+			near_threshold,
+			far_threshold,
+			fog_color: Vec3::new(
+				fog_color.0 as f32 / u8::MAX as f32,
+				fog_color.1 as f32 / u8::MAX as f32,
+				fog_color.2 as f32 / u8::MAX as f32,
+			),
+		});
+		self.compute_ortho_proj_mat();
+	}
+
 	pub(super) fn refresh_canvas_size(&mut self, canvas_size: (u32, u32)) {
-		self.proj_mat = ortho_proj_mat(canvas_size, self.zoom_level * STANDARD_SCALING);
 		self.canvas_size = canvas_size;
+		self.compute_ortho_proj_mat();
 	}
 
 	pub(crate) fn refresh_pos(&mut self, pos: Vec3) {
@@ -97,45 +134,29 @@ impl Camera3d {
 
 	/// Zoom level is the factor based on the Standard Scaling.
 	pub(crate) fn set_zoom_level(&mut self, zoom_level: f32) {
-		self.proj_mat = ortho_proj_mat(self.canvas_size, zoom_level * STANDARD_SCALING);
 		self.zoom_level = zoom_level;
+		self.compute_ortho_proj_mat();
 	}
 
 	pub(super) fn draw(&self, gl: &GLHandle, obj: &DrawableWorldObj, program: &impl GwrProgram) {
 		obj.prim.apply_vao(&gl);
-		program.uniform(gl, &self.proj_mat, &self.view_mat, obj);
+		program.uniform(
+			gl,
+			&self.proj_mat.expect("self.proj_mat should have been set"),
+			&self.view_mat,
+			obj,
+			self.space.as_ref().expect("self.space should have been set"),
+		);
 		obj.prim.draw(&gl, &obj.efx);
 	}
 }
 
-fn ortho_proj_mat(size: (u32, u32), scale: f32) -> Mat4 {
-	let (width, height) = size;
-	let scale = Vec3::new(scale, scale, 0.).cast();
-	// Centering offset of Camera
-	let offset = DVec3::new(width as f64 / 2., height as f64 / 2., 0.);
-	// Using GLM's `ortho` causes problematic result on INF by (0, width, 0, height, -INF, INF)
-	// Where bottom-left is the origin,
-	// [ 2/(r-l),        0,        0, -(r+l)/(r-l),
-	//          0, 2/(t-b),        0, -(t+b)/(t-b),
-	//          0,       0, -2/(f-n), -(f+n)/(f-n),
-	//          0,       0,        0,            1 ]
-	// Substitute w=r, l=0, h=t, b=0, f=∞ and n=-∞,
-	// [ 2/w,   0,        0,         -w/w,
-	//     0, 2/h,        0,         -h/h,
-	//     0,   0, -2/(∞+∞), -(∞-∞)/(∞+∞),
-	//     0,   0,        0,            1 ]
-	// Note that lim -2/(∞+∞) = lim -1/∞ = 0,
-	// and lim -(∞-∞)/(∞+∞) = lim -0/2∞ = 0:
-	// [ 2/w,   0, 0, -1,
-	//     0, 2/h, 0, -1,
-	//     0,   0, 0,  0,
-	//     0,   0, 0,  1 ]
-	(DMat4::new(
-		2. / width as f64, 0., 0., -1.,
-		0., 2. / height as f64, 0., -1.,
-		0., 0., 0., 0.,
-		0., 0., 0., 1.,
-	) * translation(&offset) * scaling(&scale)).cast()
+struct CameraSpace {
+	ceil_level: f64,
+	floor_level: f64,
+	near_threshold: f32,
+	far_threshold: f32,
+	fog_color: Vec3,
 }
 
 fn look_view_mat(mut pos: Vec3) -> Mat4 {
@@ -161,7 +182,7 @@ pub(crate) trait GwrProgram {
 
 	fn apply(&self, gl: &GLHandle);
 
-	fn uniform(&self, gl: &GLHandle, proj: &Mat4, view: &Mat4, obj: &DrawableWorldObj);
+	fn uniform(&self, gl: &GLHandle, proj: &Mat4, view: &Mat4, obj: &DrawableWorldObj, space: &CameraSpace);
 }
 
 pub(crate) struct GwrGeoProgram {
@@ -171,6 +192,9 @@ pub(crate) struct GwrGeoProgram {
 	projection_pos: UniformLocation,
 	filter_pos: UniformLocation,
 	light_dir_pos: UniformLocation,
+	near_threshold_pos: UniformLocation,
+	far_threshold_pos: UniformLocation,
+	fog_color_pos: UniformLocation,
 }
 
 impl GwrGeoProgram {
@@ -185,6 +209,9 @@ impl GwrGeoProgram {
 			projection_pos: gl.get_uniform_location(id, "projection"),
 			filter_pos: gl.get_uniform_location(id, "filter"),
 			light_dir_pos: gl.get_uniform_location(id, "lightDir"),
+			near_threshold_pos: gl.get_uniform_location(id, "nearThreshold"),
+			far_threshold_pos: gl.get_uniform_location(id, "farThreshold"),
+			fog_color_pos: gl.get_uniform_location(id, "fogColor"),
 			id,
 		})
 	}
@@ -200,12 +227,15 @@ impl GwrProgram for GwrGeoProgram {
 		gl.use_program(self.id);
 	}
 
-	fn uniform(&self, gl: &GLHandle, proj: &Mat4, view: &Mat4, obj: &DrawableWorldObj) {
+	fn uniform(&self, gl: &GLHandle, proj: &Mat4, view: &Mat4, obj: &DrawableWorldObj, space: &CameraSpace) {
 		gl.use_uniform_mat_4(&self.projection_pos, proj);
 		gl.use_uniform_mat_4(&self.view_pos, view);
 		gl.use_uniform_mat_4(&self.model_pos, &obj.model);
 		gl.use_uniform_mat_4(&self.filter_pos, &IDENT_MAT_4);
 		gl.use_uniform_vec_3(&self.light_dir_pos, &LIGHT_DIR);
+		gl.use_uniform_f32(&self.near_threshold_pos, space.near_threshold);
+		gl.use_uniform_f32(&self.far_threshold_pos, space.far_threshold);
+		gl.use_uniform_vec_3(&self.fog_color_pos, &space.fog_color);
 	}
 }
 

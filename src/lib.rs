@@ -1175,6 +1175,28 @@ jni_ferricia! {
 }
 
 jni_ferricia! {
+	client:Gwr.setCameraSpace(
+		mut env: JNIEnv,
+		class: JClass,
+		camera_handle: jlong,
+		data1: jdoubleArray, // len 2
+		data2: jfloatArray, // len 2
+		data3: jintArray, // len 3
+	) {
+		jni_get_arr!(arr1 = JDoubleArray; data1, env);
+		jni_get_arr!(arr2 = JFloatArray; data2, env);
+		jni_get_arr!(arr3 = JIntArray; data3, env);
+		jni_ref_ptr::<Camera3d>(camera_handle).set_camera_space(
+			arr1[0],
+			arr1[1],
+			arr2[0],
+			arr2[1],
+			(arr3[0] as _, arr3[1] as _, arr3[2] as _),
+		)
+	}
+}
+
+jni_ferricia! {
 	client:Gwr.newMeshGeomCube(mut env: JNIEnv, class: JClass, handle: jlong, width: jfloat) -> jlongArray {
 		jni_to_destructed_ptr!(SimpleMesh3dGeom::new_cube(jni_ref_ptr::<WindowHandle>(handle).gl_handle(), width), dyn Render3dPrimitive, env);
 	}
