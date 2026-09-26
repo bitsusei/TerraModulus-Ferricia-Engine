@@ -344,6 +344,18 @@ jni_ferricia! {
 }
 
 jni_ferricia! {
+	client:Mui.enableDepthTest(mut env: JNIEnv, class: JClass, handle: jlong) {
+		jni_ref_ptr::<WindowHandle>(handle).gl_handle().enable_depth_test()
+	}
+}
+
+jni_ferricia! {
+	client:Mui.disableDepthTest(mut env: JNIEnv, class: JClass, handle: jlong) {
+		jni_ref_ptr::<WindowHandle>(handle).gl_handle().disable_depth_test()
+	}
+}
+
+jni_ferricia! {
 	client:Mui.getMousePos(mut env: JNIEnv, class: JClass, handle: jlong) -> jfloatArray {
 		let pos = jni_ref_ptr::<SdlHandle>(handle).get_mouse_pos();
 		let a = env.new_float_array(2).expect("Cannot create Java array");

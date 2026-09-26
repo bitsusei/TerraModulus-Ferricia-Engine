@@ -134,7 +134,6 @@ impl GLHandle {
 	fn setup(&self) {
 		unsafe { self.gl.enable(BLEND); }
 		unsafe { self.gl.enable(MULTISAMPLE); }
-		unsafe { self.gl.enable(DEPTH_TEST); }
 		unsafe { self.gl.blend_func(SRC_ALPHA, ONE_MINUS_SRC_ALPHA); }
 	}
 
@@ -167,6 +166,14 @@ impl GLHandle {
 
 	pub(super) fn ubo_supported(&self) -> bool {
 		self.features.contains(&GLFeature::Ubo)
+	}
+
+	pub(crate) fn enable_depth_test(&self) {
+		unsafe { self.gl.enable(DEPTH_TEST); }
+	}
+
+	pub(crate) fn disable_depth_test(&self) {
+		unsafe { self.gl.disable(DEPTH_TEST); }
 	}
 
 	pub(crate) fn clear_canvas(&self) {
