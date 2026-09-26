@@ -58,7 +58,7 @@ static IDENT_MAT_4: LazyLock<Mat4> = LazyLock::new(identity);
 /// it is the result as if the value of -60 degrees is inputted.
 static CAMERA_DIR: LazyLock<DMat4> = LazyLock::new(|| DMat4::new_rotation(DVec3::new(f64::PI() / 3., 0., 0.)));
 /// The direction of light pointing South with 45 degrees of depression.
-static LIGHT_DIR: LazyLock<Vec3> = LazyLock::new(|| Vec3::new(0., -1., 1.).normalize());
+static LIGHT_DIR: LazyLock<Vec3> = LazyLock::new(|| Vec3::new(0., 1., -1.).normalize());
 /// pixels per meter
 static STANDARD_SCALING: f32 = 64.;
 
@@ -85,7 +85,7 @@ impl Camera3d {
 	fn compute_ortho_proj_mat(&mut self) {
 		let (width, height) = self.canvas_size;
 		let scale = self.zoom_level * STANDARD_SCALING;
-		let scale = Vec3::new(scale, scale, 0.).cast();
+		let scale = Vec3::new(scale, scale, 1.).cast();
 		// Centering offset of Camera
 		let offset = DVec3::new(width as f64 / 2., height as f64 / 2., 0.);
 		let space = self.space.as_ref().expect("self.space should have been set");

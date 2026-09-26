@@ -22,6 +22,9 @@ pub(super) struct OdeHandle {
 impl OdeHandle {
 	pub fn new() -> Self {
 		unsafe { dInitODE(); }
+		// unsafe extern "C" fn msg(_: ::std::os::raw::c_int, _: *const ::std::os::raw::c_char, _: ode_sys::va_list) { std::arch::breakpoint(); };
+		// unsafe { ode_sys::dSetDebugHandler(Some(msg)); }
+		// unsafe { ode_sys::dSetErrorHandler(Some(msg)); }
 		Self { _private: Default::default() }
 	}
 
