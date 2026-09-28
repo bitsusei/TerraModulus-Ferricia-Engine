@@ -44,13 +44,14 @@ use array_macro::array;
 use csgrs::mesh::Mesh;
 use csgrs::traits::CSG;
 use gl::{ARRAY_BUFFER, DYNAMIC_DRAW, ELEMENT_ARRAY_BUFFER, LINES, STATIC_DRAW, TRIANGLES};
-use glow::{Buffer, NativeVertexArray, Program, UniformLocation, VertexArray};
-use nalgebra_glm::{DMat4, DQuat, DVec3, Mat4, Vec3, identity, ortho, quat_to_mat4, scaling, translation};
+use glow::{Buffer, Framebuffer, NativeVertexArray, Program, Texture, UniformLocation, VertexArray, DEPTH_BUFFER_BIT};
+use nalgebra_glm::{identity, look_at, ortho, quat_to_mat4, scaling, translation, DMat4, DQuat, DVec3, Mat4, Vec3, DVec4};
 use num_traits::FloatConst;
 use sdl3::pixels::Color;
 use std::any::Any;
 use std::num::NonZeroU32;
 use std::sync::LazyLock;
+use getset::Getters;
 
 static IDENT_MAT_4: LazyLock<Mat4> = LazyLock::new(identity);
 /// It should be rotating about x-axis with -60 degrees, but somehow this function is treating
@@ -58,6 +59,7 @@ static IDENT_MAT_4: LazyLock<Mat4> = LazyLock::new(identity);
 /// it is the result as if the value of -60 degrees is inputted.
 static CAMERA_DIR: LazyLock<DMat4> = LazyLock::new(|| DMat4::new_rotation(DVec3::new(f64::PI() / 3., 0., 0.)));
 /// The direction of light pointing South with 45 degrees of depression.
+/// This literally means pointing North with 45 degrees of elevation; the same reason as above.
 static LIGHT_DIR: LazyLock<Vec3> = LazyLock::new(|| Vec3::new(0., 1., -1.).normalize());
 /// pixels per meter
 static STANDARD_SCALING: f32 = 64.;
@@ -68,17 +70,19 @@ pub(crate) struct Camera3d {
 	canvas_size: (u32, u32),
 	zoom_level: f32,
 	space: Option<CameraSpace>,
+	depth_map: (Framebuffer, Texture),
 }
 
 impl Camera3d {
 	/// Position is the position where the Camera is at (position of the Player character).
-	pub(super) fn new(canvas_size: (u32, u32), pos: Vec3) -> Self {
+	pub(super) fn new(gl: &GLHandle, canvas_size: (u32, u32), pos: Vec3) -> Self {
 		Self {
 			proj_mat: None,
 			view_mat: look_view_mat(pos),
 			canvas_size,
 			zoom_level: 1.0,
 			space: None,
+			depth_map: gl.new_depth_fbo(),
 		}
 	}
 
@@ -121,6 +125,17 @@ impl Camera3d {
 		self.compute_ortho_proj_mat();
 	}
 
+	pub(crate) fn start_shadow_rendering(&self, gl: &GLHandle) {
+		gl.gl_resize_viewport(1024, 1024);
+		gl.use_framebuffer(Some(self.depth_map.0));
+		gl.clear_viewport(DEPTH_BUFFER_BIT);
+	}
+
+	pub(crate) fn end_shadow_rendering(&self, gl: &GLHandle) {
+		gl.use_framebuffer(None);
+		gl.gl_resize_viewport(self.canvas_size.0, self.canvas_size.1);
+	}
+
 	pub(crate) fn refresh_pos(&mut self, pos: Vec3) {
 		self.view_mat = look_view_mat(pos);
 	}
@@ -138,7 +153,7 @@ impl Camera3d {
 		self.compute_ortho_proj_mat();
 	}
 
-	pub(super) fn draw(&self, gl: &GLHandle, obj: &DrawableWorldObj, program: &impl GwrProgram) {
+	pub(super) fn draw_geo(&self, gl: &GLHandle, obj: &DrawableWorldObj, program: &GwrGeoProgram) {
 		obj.prim.apply_vao(&gl);
 		program.uniform(
 			gl,
@@ -148,6 +163,12 @@ impl Camera3d {
 			self.space.as_ref().expect("self.space should have been set"),
 		);
 		obj.prim.draw(&gl, &obj.efx);
+	}
+
+	pub(super) fn draw_sdw(&self, gl: &GLHandle, obj: &DrawableWorldObj, program: &GwrSdwProgram, space: &LightSpace) {
+		obj.prim.apply_vao(&gl);
+		program.uniform(gl, obj, space);
+		obj.prim.draw_depth(&gl);
 	}
 }
 
@@ -176,13 +197,120 @@ fn look_view_mat(mut pos: Vec3) -> Mat4 {
 	(*CAMERA_DIR * translation(&pos.cast())).cast()
 }
 
+#[derive(Getters)]
+pub(crate) struct LightSpace {
+	transform: Mat4,
+	#[get = "pub(crate)"]
+	aabb: (DVec3, DVec3),
+}
+
+impl LightSpace {
+	const LIGHT_DIR: DVec3 = DVec3::new(0., -1., 1.);
+	const Z_MUL: f64 = 10.0;
+
+	/// Reference: https://learnopengl.com/Guest-Articles/2021/CSM
+	pub(crate) fn new(min: DVec3, max: DVec3) -> Self {
+		// ideally args should be the exact camera space bounding box
+		// but now just using AABB of it, passed the same type of args as ortho.
+		let pos = (min + max) / 2.0;
+		let up = DVec3::y();
+		let dir = pos + Self::LIGHT_DIR;
+		let view = look_at(&pos, &dir, &up);
+		let mut min_x = None;
+		let mut min_y = None;
+		let mut min_z = None;
+		let mut max_x = None;
+		let mut max_y = None;
+		let mut max_z = None;
+		for x in [min.x, max.x] {
+			for y in [min.y, max.y] {
+				for z in [min.z, max.z] {
+					let v = view * DVec4::new(x, y, z, 1.0);
+					if min_x == None { min_x = Some(v.x); }
+					else if let Some(x) = min_x && v.x < x { min_x = Some(v.x); }
+					if min_y == None { min_y = Some(v.y); }
+					else if let Some(y) = min_y && v.y < y { min_y = Some(v.y); }
+					if min_z == None { min_z = Some(v.z); }
+					else if let Some(z) = min_z && v.z < z { min_z = Some(v.z); }
+					if max_x == None { max_x = Some(v.x); }
+					else if let Some(x) = max_x && v.x > x { max_x = Some(v.x); }
+					if max_y == None { max_y = Some(v.y); }
+					else if let Some(y) = max_y && v.y > y { max_y = Some(v.y); }
+					if max_z == None { max_z = Some(v.z); }
+					else if let Some(z) = max_z && v.z > z { max_z = Some(v.z); }
+				}
+			}
+		}
+		let view_min = DVec3::new(
+			min_x.unwrap(),
+			min_y.unwrap(),
+			{
+				let min_z = min_z.unwrap();
+				if min_z < 0.0 { min_z * Self::Z_MUL } else { min_z / Self::Z_MUL }
+			},
+		);
+		let view_max = DVec3::new(
+			max_x.unwrap(),
+			max_y.unwrap(),
+			{
+				let max_z = max_z.unwrap();
+				if max_z < 0.0 { max_z / Self::Z_MUL } else { max_z * Self::Z_MUL }
+			},
+		);
+		let mut min_x = None;
+		let mut min_y = None;
+		let mut min_z = None;
+		let mut max_x = None;
+		let mut max_y = None;
+		let mut max_z = None;
+		let view_inverse = view.try_inverse().unwrap();
+		for x in [view_min.x, view_max.x] {
+			for y in [view_min.y, view_max.y] {
+				for z in [view_min.z, view_max.z] {
+					let v = view_inverse * DVec4::new(x, y, z, 1.0);
+					if min_x == None { min_x = Some(v.x); }
+					else if let Some(x) = min_x && v.x < x { min_x = Some(v.x); }
+					if min_y == None { min_y = Some(v.y); }
+					else if let Some(y) = min_y && v.y < y { min_y = Some(v.y); }
+					if min_z == None { min_z = Some(v.z); }
+					else if let Some(z) = min_z && v.z < z { min_z = Some(v.z); }
+					if max_x == None { max_x = Some(v.x); }
+					else if let Some(x) = max_x && v.x > x { max_x = Some(v.x); }
+					if max_y == None { max_y = Some(v.y); }
+					else if let Some(y) = max_y && v.y > y { max_y = Some(v.y); }
+					if max_z == None { max_z = Some(v.z); }
+					else if let Some(z) = max_z && v.z > z { max_z = Some(v.z); }
+				}
+			}
+		}
+		Self {
+			transform: (ortho(view_min.x, view_max.x, view_min.y, view_max.y, view_min.z, view_max.z) * view).cast(),
+			aabb: (
+				DVec3::new(min_x.unwrap(), min_y.unwrap(), min_z.unwrap()),
+				DVec3::new(max_x.unwrap(), max_y.unwrap(), max_z.unwrap()),
+			),
+		}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use nalgebra_glm::{look_at, DVec3};
+	use crate::mui::rendering3d::LightSpace;
+
+	#[test]
+	fn foo() {
+		let pos = DVec3::zeros();
+		let up = DVec3::y();
+		println!("{:?}", look_at(&pos, &LightSpace::LIGHT_DIR, &up));
+	}
+}
+
 /// Gameplay World Rendering (GWR) Program
 pub(crate) trait GwrProgram {
 	fn id(&self) -> u32;
 
 	fn apply(&self, gl: &GLHandle);
-
-	fn uniform(&self, gl: &GLHandle, proj: &Mat4, view: &Mat4, obj: &DrawableWorldObj, space: &CameraSpace);
 }
 
 pub(crate) struct GwrGeoProgram {
@@ -215,17 +343,6 @@ impl GwrGeoProgram {
 			id,
 		})
 	}
-}
-
-impl GwrProgram for GwrGeoProgram {
-	fn id(&self) -> u32 {
-		self.id.0.get()
-	}
-
-	#[inline]
-	fn apply(&self, gl: &GLHandle) {
-		gl.use_program(self.id);
-	}
 
 	fn uniform(&self, gl: &GLHandle, proj: &Mat4, view: &Mat4, obj: &DrawableWorldObj, space: &CameraSpace) {
 		gl.use_uniform_mat_4(&self.projection_pos, proj);
@@ -239,6 +356,53 @@ impl GwrProgram for GwrGeoProgram {
 	}
 }
 
+impl GwrProgram for GwrGeoProgram {
+	fn id(&self) -> u32 {
+		self.id.0.get()
+	}
+
+	#[inline]
+	fn apply(&self, gl: &GLHandle) {
+		gl.use_program(self.id);
+	}
+}
+
+pub(crate) struct GwrSdwProgram {
+	id: Program,
+	model_pos: UniformLocation,
+	light_transform_pos: UniformLocation,
+}
+
+impl GwrSdwProgram {
+	pub(crate) fn new(gl: &GLHandle, vsh: String, fsh: String) -> FerriciaResult<Self> {
+		let id = gl.new_shader_program([
+			compile_shader_from(gl, ShaderType::Vertex, vsh)?,
+			compile_shader_from(gl, ShaderType::Fragment, fsh)?,
+		]);
+		Ok(Self {
+			model_pos: gl.get_uniform_location(id, "model"),
+			light_transform_pos: gl.get_uniform_location(id, "lightTransform"),
+			id,
+		})
+	}
+
+	fn uniform(&self, gl: &GLHandle, obj: &DrawableWorldObj, space: &LightSpace) {
+		gl.use_uniform_mat_4(&self.model_pos, &obj.model);
+		gl.use_uniform_mat_4(&self.light_transform_pos, &space.transform);
+	}
+}
+
+impl GwrProgram for GwrSdwProgram {
+	fn id(&self) -> u32 {
+		self.id.0.get()
+	}
+
+	#[inline]
+	fn apply(&self, gl: &GLHandle) {
+		gl.use_program(self.id);
+	}
+}
+
 /// Buffers and Vertices of this remain immutable
 pub(crate) trait Render3dPrimitive: Any {
 	fn vao(&self) -> u32;
@@ -249,6 +413,8 @@ pub(crate) trait Render3dPrimitive: Any {
 	}
 
 	fn draw(&self, gl: &GLHandle, efx: &Render3DEfx);
+
+	fn draw_depth(&self, gl: &GLHandle);
 }
 
 pub(crate) enum Render3DEfx {
@@ -323,6 +489,10 @@ impl Render3dPrimitive for SimpleLine3dGeom {
 		})); // Color
 		gl.draw_arrays(LINES, Self::NUM_VERTICES);
 	}
+
+	fn draw_depth(&self, gl: &GLHandle) {
+		gl.draw_arrays(LINES, Self::NUM_VERTICES);
+	}
 }
 
 impl Geom for SimpleLine3dGeom {}
@@ -363,6 +533,10 @@ impl Render3dPrimitive for SimpleQuad3dGeom {
 		gl.vert_attr(2, VertexAttrVariant::UbyteNorm4.call(match efx {
 			Render3DEfx::Color(color) => color.rgba(),
 		})); // Color
+		gl.draw_elements(TRIANGLES, Self::NUM_ELEMENTS);
+	}
+
+	fn draw_depth(&self, gl: &GLHandle) {
 		gl.draw_elements(TRIANGLES, Self::NUM_ELEMENTS);
 	}
 }
@@ -453,6 +627,10 @@ impl Render3dPrimitive for SimpleMesh3dGeom {
 		gl.vert_attr(2, VertexAttrVariant::UbyteNorm4.call(match efx {
 			Render3DEfx::Color(color) => color.rgba(),
 		})); // Color
+		gl.draw_elements(TRIANGLES, self.num_vertices);
+	}
+
+	fn draw_depth(&self, gl: &GLHandle) {
 		gl.draw_elements(TRIANGLES, self.num_vertices);
 	}
 }

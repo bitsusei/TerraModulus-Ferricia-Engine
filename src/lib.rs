@@ -13,6 +13,7 @@ mod util;
 pub mod phy;
 mod math;
 
+use crate::math::CameraSpace;
 #[cfg(feature = "client")]
 use crate::mui::{
 	MuiEvent,
@@ -32,14 +33,15 @@ use crate::mui::{
 		TexProgram,
 		TxtProgram,
 	},
-	rendering3d::{Camera3d, DrawableWorldObj, GwrGeoProgram, Render3DEfx, Render3dPrimitive, SimpleMesh3dGeom},
+	rendering3d::{Camera3d, DrawableWorldObj, GwrGeoProgram, Render3DEfx, Render3dPrimitive, SimpleMesh3dGeom, GwrSdwProgram, LightSpace},
 	window::WindowHandle,
 };
-use crate::phy::{filter_phy_raw_geom, OdeBox, OdeMass, OdeNonPlaceableMarker, OdePlaceableGeom, OdePlaceableMarker, OdeSpace, PhyBody, PhyCollisionManager, PhyEnv, PhyRawGeom, PhyRawGeomPlaceable, PhyWorld, StaticSpaceSet};
+use crate::phy::{OdeBox, OdeMass, OdeNonPlaceableMarker, OdePlaceableGeom, OdePlaceableMarker, OdeSpace, PhyBody, PhyCollisionManager, PhyEnv, PhyRawGeom, PhyRawGeomPlaceable, PhyWorld, StaticSpaceSet};
 use bytemuck::cast_slice;
 use derive_more::From;
+use futures::StreamExt;
 use jni::JNIEnv;
-use jni::objects::{JByteArray, JClass, JDoubleArray, JFloatArray, JIntArray, JLongArray, JObject, JString, ReleaseMode};
+use jni::objects::{JByteArray, JClass, JDoubleArray, JFloatArray, JIntArray, JObject, JString, ReleaseMode};
 use jni::sys::{jboolean, jbyte, jbyteArray, jdouble, jdoubleArray, jfloat, jfloatArray, jint, jintArray, jlong, jlongArray, jobjectArray, jsize, jstring};
 use nalgebra_glm::{DQuat, DVec3, DVec4, IVec2, Vec2, Vec3};
 use paste::paste;
@@ -50,8 +52,6 @@ use std::env::set_var;
 use std::fmt::Display;
 use std::panic::{AssertUnwindSafe, catch_unwind, take_hook};
 use std::ptr::{from_raw_parts, null};
-use futures::StreamExt;
-use crate::math::CameraSpace;
 
 #[derive(From)]
 struct FerriciaError(String);
@@ -842,6 +842,12 @@ jni_ferricia! {
 }
 
 jni_ferricia! {
+	client:Gwr.sdwShaders(mut env: JNIEnv, class: JClass, handle: jlong, vsh: JString, fsh: JString) -> jlong {
+		jni_res_to_ptr(GwrSdwProgram::new(jni_ref_ptr::<WindowHandle>(handle).gl_handle(), jni_get_string(&mut env, vsh), jni_get_string(&mut env, fsh)), &mut env)
+	}
+}
+
+jni_ferricia! {
 	client:Mui.newSimpleLineGeom(mut env: JNIEnv, class: JClass, handle: jlong, data: jintArray) -> jlong {
 		jni_get_arr!(arr = JIntArray; data, env);
 		jni_to_ptr(DrawableSet::new(SimpleLineGeom::new(
@@ -1253,6 +1259,62 @@ jni_ferricia! {
 			jni_ref_ptr::<Camera3d>(camera_handle),
 			jni_ref_ptr::<DrawableWorldObj>(obj_handle),
 			jni_ref_ptr::<GwrGeoProgram>(program_handle),
+		)
+	}
+}
+
+jni_ferricia! {
+	client:Gwr.newLightSpace(mut env: JNIEnv, class: JClass, data: jdoubleArray) -> jlong {
+		jni_get_arr!(arr = JDoubleArray; data, env);
+		jni_to_ptr(LightSpace::new(DVec3::from_column_slice(&arr[0..3]), DVec3::from_column_slice(&arr[3..6])))
+	}
+}
+
+jni_ferricia! {
+	client:Gwr.getLightSpaceAabb(mut env: JNIEnv, class: JClass, handle: jlong) -> jdoubleArray {
+		let r = jni_ref_ptr::<LightSpace>(handle).aabb();
+		let arr = env.new_double_array(6).expect("Cannot create Java double array");
+		env.set_double_array_region(&arr, 0, &[r.0.x, r.0.y, r.0.z, r.1.x, r.1.y, r.1.z])
+			.expect("Cannot set Java double array");
+		arr.into_raw()
+	}
+}
+
+jni_ferricia! {
+	client:Gwr.dropLightSpace(mut env: JNIEnv, class: JClass, handle: jlong) {
+		jni_drop_with_ptr::<LightSpace>(handle)
+	}
+}
+
+jni_ferricia! {
+	client:Gwr.startShadowRendering(mut env: JNIEnv, class: JClass, handle: jlong, camera_handle: jlong) {
+		jni_ref_ptr::<Camera3d>(camera_handle).start_shadow_rendering(jni_ref_ptr::<WindowHandle>(handle).gl_handle())
+	}
+}
+
+jni_ferricia! {
+	client:Gwr.endShadowRendering(mut env: JNIEnv, class: JClass, handle: jlong, camera_handle: jlong) {
+		jni_ref_ptr::<Camera3d>(camera_handle).end_shadow_rendering(jni_ref_ptr::<WindowHandle>(handle).gl_handle())
+	}
+}
+
+jni_ferricia! {
+	client:Gwr.drawGwrShadow(
+		mut env: JNIEnv,
+		class: JClass,
+		handle: jlong,
+		canvas_handle: jlong,
+		camera_handle: jlong,
+		obj_handle: jlong,
+		space_handle: jlong,
+		program_handle: jlong,
+	) {
+		jni_ref_ptr::<CanvasHandle>(canvas_handle).draw_gwr_shadow(
+			jni_ref_ptr::<WindowHandle>(handle).gl_handle(),
+			jni_ref_ptr::<Camera3d>(camera_handle),
+			jni_ref_ptr::<DrawableWorldObj>(obj_handle),
+			jni_ref_ptr::<LightSpace>(space_handle),
+			jni_ref_ptr::<GwrSdwProgram>(program_handle),
 		)
 	}
 }

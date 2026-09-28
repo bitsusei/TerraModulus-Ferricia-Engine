@@ -24,7 +24,7 @@
 
 use getset::Getters;
 use gl::{VertexAttrib1d, VertexAttrib1f, VertexAttrib1s, VertexAttrib2d, VertexAttrib2f, VertexAttrib2s, VertexAttrib3d, VertexAttrib3f, VertexAttrib3s, VertexAttrib4Nub, VertexAttrib4d, VertexAttrib4f, VertexAttrib4s, VertexAttribI1i, VertexAttribI1ui, VertexAttribI2i, VertexAttribI2ui, VertexAttribI3i, VertexAttribI3ui, VertexAttribI4i, VertexAttribI4ui};
-use glow::{Buffer, Context, HasContext, PixelUnpackData, Program, Shader, Texture, UniformLocation, VertexArray, BGR, BGRA, BLEND, BYTE, CLAMP_TO_EDGE, COLOR_BUFFER_BIT, COMPUTE_SHADER, DOUBLE, FLOAT, FRAGMENT_SHADER, GEOMETRY_SHADER, INT, LINEAR, MULTISAMPLE, NEAREST, NEAREST_MIPMAP_LINEAR, ONE_MINUS_SRC_ALPHA, RENDERER, RGB, RGB10, RGB10_A2, RGB12, RGB16, RGB16F, RGB32F, RGB8, RGBA, RGBA12, RGBA16, RGBA16F, RGBA32F, RGBA8, SHADING_LANGUAGE_VERSION, SHORT, SRC_ALPHA, SRGB, SRGB8, SRGB8_ALPHA8, SRGB_ALPHA, STREAM_DRAW, TESS_CONTROL_SHADER, TESS_EVALUATION_SHADER, TEXTURE0, TEXTURE_2D, TEXTURE_MAG_FILTER, TEXTURE_MIN_FILTER, TEXTURE_WRAP_S, TEXTURE_WRAP_T, UNPACK_ALIGNMENT, UNSIGNED_BYTE, UNSIGNED_INT, UNSIGNED_SHORT, VENDOR, VERSION, VERTEX_SHADER, SCISSOR_TEST, DEPTH_TEST, DEPTH_BUFFER_BIT};
+use glow::{Buffer, Context, HasContext, PixelUnpackData, Program, Shader, Texture, UniformLocation, VertexArray, BGR, BGRA, BLEND, BYTE, CLAMP_TO_EDGE, COLOR_BUFFER_BIT, COMPUTE_SHADER, DOUBLE, FLOAT, FRAGMENT_SHADER, GEOMETRY_SHADER, INT, LINEAR, MULTISAMPLE, NEAREST, NEAREST_MIPMAP_LINEAR, ONE_MINUS_SRC_ALPHA, RENDERER, RGB, RGB10, RGB10_A2, RGB12, RGB16, RGB16F, RGB32F, RGB8, RGBA, RGBA12, RGBA16, RGBA16F, RGBA32F, RGBA8, SHADING_LANGUAGE_VERSION, SHORT, SRC_ALPHA, SRGB, SRGB8, SRGB8_ALPHA8, SRGB_ALPHA, STREAM_DRAW, TESS_CONTROL_SHADER, TESS_EVALUATION_SHADER, TEXTURE0, TEXTURE_2D, TEXTURE_MAG_FILTER, TEXTURE_MIN_FILTER, TEXTURE_WRAP_S, TEXTURE_WRAP_T, UNPACK_ALIGNMENT, UNSIGNED_BYTE, UNSIGNED_INT, UNSIGNED_SHORT, VENDOR, VERSION, VERTEX_SHADER, SCISSOR_TEST, DEPTH_TEST, DEPTH_BUFFER_BIT, Framebuffer, DEPTH_COMPONENT, TEXTURE_COMPARE_MODE, COMPARE_REF_TO_TEXTURE, TEXTURE_COMPARE_FUNC, LEQUAL, FRAMEBUFFER, DEPTH_ATTACHMENT, NONE};
 use nalgebra_glm::{IVec2, TMat4, UVec2, Vec2, Vec3, Vec4};
 use num_traits::{Bounded, Num};
 use regex::Regex;
@@ -147,6 +147,12 @@ impl GLHandle {
 			if !self.gl.supported_extensions().contains("GL_ARB_vertex_array_object") {
 				return Err(format!("GL_ARB_vertex_array_object not found with GL {}", self.gl_version));
 			}
+			// only used to render shadows, so maybe this is not needed when not rendering shadows?
+			if !self.gl.supported_extensions().contains("GL_ARB_framebuffer_object") {
+				// GL_EXT_framebuffer_object is not supported
+				// Note that support for ARB one is narrower than EXT one; likely reconsideration is needed.
+				return Err(format!("GL_ARB_framebuffer_object not found with GL {}", self.gl_version));
+			}
 		}
 
 		if self.gl_version.cmp(&VER_3_1) == Ordering::Less { // < 3.1
@@ -178,6 +184,10 @@ impl GLHandle {
 
 	pub(crate) fn clear_canvas(&self) {
 		unsafe { self.gl.clear(COLOR_BUFFER_BIT | DEPTH_BUFFER_BIT) }
+	}
+
+	pub(super) fn clear_viewport(&self, mask: u32) {
+		unsafe { self.gl.clear(mask) }
 	}
 
 	pub(crate) fn set_clear_color(&self, color: (f32, f32, f32, f32)) {
@@ -280,6 +290,10 @@ impl GLHandle {
 	pub(super) fn use_texture_2d(&self, texture: Texture) {
 		unsafe { self.gl.active_texture(TEXTURE0) }
 		unsafe { self.gl.bind_texture(TEXTURE_2D, Some(texture)) }
+	}
+
+	pub(super) fn use_framebuffer(&self, fbo: Option<Framebuffer>) {
+		unsafe { self.gl.bind_framebuffer(FRAMEBUFFER, fbo) }
 	}
 
 	pub(super) fn use_vao(&self, vao: VertexArray) {
@@ -418,6 +432,37 @@ impl GLHandle {
 
 	pub(super) fn disable_scissor(&self) {
 		unsafe { self.gl.disable(SCISSOR_TEST); }
+	}
+
+	pub(super) fn new_depth_fbo(&self) -> (Framebuffer, Texture) {
+		unsafe {
+			let fbo = self.gl.create_framebuffer().unwrap();
+			let tex = self.gl.create_texture().unwrap();
+			self.gl.bind_texture(TEXTURE_2D, Some(tex));
+			self.gl.tex_image_2d(
+				TEXTURE_2D,
+				0,
+				DEPTH_COMPONENT as _,
+				1024,
+				1024,
+				0,
+				DEPTH_COMPONENT,
+				FLOAT,
+				PixelUnpackData::Slice(None),
+			);
+			self.gl.tex_parameter_i32(TEXTURE_2D, TEXTURE_WRAP_S, CLAMP_TO_EDGE as _);
+			self.gl.tex_parameter_i32(TEXTURE_2D, TEXTURE_WRAP_T, CLAMP_TO_EDGE as _);
+			self.gl.tex_parameter_i32(TEXTURE_2D, TEXTURE_MIN_FILTER, LINEAR as _);
+			self.gl.tex_parameter_i32(TEXTURE_2D, TEXTURE_MAG_FILTER, LINEAR as _);
+			self.gl.tex_parameter_i32(TEXTURE_2D, TEXTURE_COMPARE_MODE, COMPARE_REF_TO_TEXTURE as _);
+			self.gl.tex_parameter_i32(TEXTURE_2D, TEXTURE_COMPARE_FUNC, LEQUAL as _);
+			self.gl.bind_framebuffer(FRAMEBUFFER, Some(fbo));
+			self.gl.framebuffer_texture_2d(FRAMEBUFFER, DEPTH_ATTACHMENT, TEXTURE_2D, Some(tex), 0);
+			self.gl.draw_buffer(NONE);
+			self.gl.read_buffer(NONE);
+			self.gl.bind_framebuffer(FRAMEBUFFER, None);
+			(fbo, tex)
+		}
 	}
 }
 

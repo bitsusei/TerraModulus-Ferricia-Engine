@@ -108,16 +108,31 @@ impl CanvasHandle {
 	}
 
 	pub(crate) fn new_camera(&self, pos: Vec3) -> Camera3d {
-		Camera3d::new(self.size, pos)
+		Camera3d::new(&self.gl_handle, self.size, pos)
 	}
 
-	pub(crate) fn draw_gwr(&self, gl: &GLHandle, camera: &Camera3d, obj: &DrawableWorldObj, program: &impl GwrProgram) {
+	pub(crate) fn draw_gwr(&self, gl: &GLHandle, camera: &Camera3d, obj: &DrawableWorldObj, program: &GwrGeoProgram) {
 		if self.used_program.get() != program.id() {
 			program.apply(gl);
 			self.used_program.set(program.id());
 		}
 
-		camera.draw(gl, obj, program);
+		camera.draw_geo(gl, obj, program);
+	}
+
+	pub(crate) fn draw_gwr_shadow(&self,
+	                              gl: &GLHandle,
+	                              camera: &Camera3d,
+	                              obj: &DrawableWorldObj,
+	                              space: &LightSpace,
+	                              program: &GwrSdwProgram,
+	) {
+		if self.used_program.get() != program.id() {
+			program.apply(gl);
+			self.used_program.set(program.id());
+		}
+		
+		camera.draw_sdw(gl, obj, program, space);
 	}
 
 	pub(crate) fn draw_gui(&self, set: &DrawableSet, program: &impl GuiProgram, texture: Option<u32>) {
@@ -173,13 +188,13 @@ impl CanvasHandle {
 	pub(crate) fn enable_scissor(&self, pos: IVec2, size: (u32, u32)) {
 		self.gl_handle.enable_scissor(pos, size)
 	}
-	
+
 	pub(crate) fn disable_scissor(&self) {
 		self.gl_handle.disable_scissor()
 	}
 }
 
-use crate::mui::rendering3d::{Camera3d, DrawableWorldObj, GwrProgram};
+use crate::mui::rendering3d::{Camera3d, DrawableWorldObj, GwrGeoProgram, GwrProgram, GwrSdwProgram, LightSpace};
 
 pub(super) struct DrawingContext<'a> {
 	window_size: &'a (u32, u32),
