@@ -111,13 +111,19 @@ impl CanvasHandle {
 		Camera3d::new(&self.gl_handle, self.size, pos)
 	}
 
-	pub(crate) fn draw_gwr(&self, gl: &GLHandle, camera: &Camera3d, obj: &DrawableWorldObj, program: &GwrGeoProgram) {
+	pub(crate) fn draw_gwr(&self,
+	                       gl: &GLHandle,
+	                       camera: &Camera3d,
+	                       obj: &DrawableWorldObj,
+	                       space: &LightSpace,
+	                       program: &GwrGeoProgram,
+	) {
 		if self.used_program.get() != program.id() {
 			program.apply(gl);
 			self.used_program.set(program.id());
 		}
 
-		camera.draw_geo(gl, obj, program);
+		camera.draw_geo(gl, obj, program, space);
 	}
 
 	pub(crate) fn draw_gwr_shadow(&self,
@@ -131,7 +137,7 @@ impl CanvasHandle {
 			program.apply(gl);
 			self.used_program.set(program.id());
 		}
-		
+
 		camera.draw_sdw(gl, obj, program, space);
 	}
 

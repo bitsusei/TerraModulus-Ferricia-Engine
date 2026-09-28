@@ -45,7 +45,7 @@ use csgrs::mesh::Mesh;
 use csgrs::traits::CSG;
 use gl::{ARRAY_BUFFER, DYNAMIC_DRAW, ELEMENT_ARRAY_BUFFER, LINES, STATIC_DRAW, TRIANGLES};
 use glow::{Buffer, Framebuffer, NativeVertexArray, Program, Texture, UniformLocation, VertexArray, DEPTH_BUFFER_BIT};
-use nalgebra_glm::{identity, look_at, ortho, quat_to_mat4, scaling, translation, DMat4, DQuat, DVec3, Mat4, Vec3, DVec4};
+use nalgebra_glm::{identity, look_at, ortho, quat_to_mat4, scaling, translation, DMat4, DQuat, DVec3, Mat4, Vec3, DVec4, IVec2};
 use num_traits::FloatConst;
 use sdl3::pixels::Color;
 use std::any::Any;
@@ -126,6 +126,7 @@ impl Camera3d {
 	}
 
 	pub(crate) fn start_shadow_rendering(&self, gl: &GLHandle) {
+		gl.disable_scissor(); // workaround; workflow should actually change
 		gl.gl_resize_viewport(1024, 1024);
 		gl.use_framebuffer(Some(self.depth_map.0));
 		gl.clear_viewport(DEPTH_BUFFER_BIT);
@@ -134,6 +135,7 @@ impl Camera3d {
 	pub(crate) fn end_shadow_rendering(&self, gl: &GLHandle) {
 		gl.use_framebuffer(None);
 		gl.gl_resize_viewport(self.canvas_size.0, self.canvas_size.1);
+		gl.enable_scissor(IVec2::zeros(), self.canvas_size);
 	}
 
 	pub(crate) fn refresh_pos(&mut self, pos: Vec3) {
@@ -153,13 +155,16 @@ impl Camera3d {
 		self.compute_ortho_proj_mat();
 	}
 
-	pub(super) fn draw_geo(&self, gl: &GLHandle, obj: &DrawableWorldObj, program: &GwrGeoProgram) {
+	pub(super) fn draw_geo(&self, gl: &GLHandle, obj: &DrawableWorldObj, program: &GwrGeoProgram, space: &LightSpace) {
 		obj.prim.apply_vao(&gl);
+		// assume shadow is used
+		gl.use_texture_2d(self.depth_map.1);
 		program.uniform(
 			gl,
 			&self.proj_mat.expect("self.proj_mat should have been set"),
 			&self.view_mat,
 			obj,
+			space,
 			self.space.as_ref().expect("self.space should have been set"),
 		);
 		obj.prim.draw(&gl, &obj.efx);
@@ -318,6 +323,7 @@ pub(crate) struct GwrGeoProgram {
 	model_pos: UniformLocation,
 	view_pos: UniformLocation,
 	projection_pos: UniformLocation,
+	light_transform_pos: UniformLocation,
 	filter_pos: UniformLocation,
 	light_dir_pos: UniformLocation,
 	near_threshold_pos: UniformLocation,
@@ -335,6 +341,7 @@ impl GwrGeoProgram {
 			model_pos: gl.get_uniform_location(id, "model"),
 			view_pos: gl.get_uniform_location(id, "view"),
 			projection_pos: gl.get_uniform_location(id, "projection"),
+			light_transform_pos: gl.get_uniform_location(id, "lightTransform"),
 			filter_pos: gl.get_uniform_location(id, "filter"),
 			light_dir_pos: gl.get_uniform_location(id, "lightDir"),
 			near_threshold_pos: gl.get_uniform_location(id, "nearThreshold"),
@@ -344,10 +351,18 @@ impl GwrGeoProgram {
 		})
 	}
 
-	fn uniform(&self, gl: &GLHandle, proj: &Mat4, view: &Mat4, obj: &DrawableWorldObj, space: &CameraSpace) {
+	fn uniform(&self,
+	           gl: &GLHandle,
+	           proj: &Mat4,
+	           view: &Mat4,
+	           obj: &DrawableWorldObj,
+	           light: &LightSpace,
+	           space: &CameraSpace,
+	) {
 		gl.use_uniform_mat_4(&self.projection_pos, proj);
 		gl.use_uniform_mat_4(&self.view_pos, view);
 		gl.use_uniform_mat_4(&self.model_pos, &obj.model);
+		gl.use_uniform_mat_4(&self.light_transform_pos, &light.transform);
 		gl.use_uniform_mat_4(&self.filter_pos, &IDENT_MAT_4);
 		gl.use_uniform_vec_3(&self.light_dir_pos, &LIGHT_DIR);
 		gl.use_uniform_f32(&self.near_threshold_pos, space.near_threshold);

@@ -1252,12 +1252,14 @@ jni_ferricia! {
 		canvas_handle: jlong,
 		camera_handle: jlong,
 		obj_handle: jlong,
+		space_handle: jlong,
 		program_handle: jlong,
 	) {
 		jni_ref_ptr::<CanvasHandle>(canvas_handle).draw_gwr(
 			jni_ref_ptr::<WindowHandle>(handle).gl_handle(),
 			jni_ref_ptr::<Camera3d>(camera_handle),
 			jni_ref_ptr::<DrawableWorldObj>(obj_handle),
+			jni_ref_ptr::<LightSpace>(space_handle),
 			jni_ref_ptr::<GwrGeoProgram>(program_handle),
 		)
 	}

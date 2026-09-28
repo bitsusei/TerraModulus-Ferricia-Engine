@@ -292,6 +292,11 @@ impl GLHandle {
 		unsafe { self.gl.bind_texture(TEXTURE_2D, Some(texture)) }
 	}
 
+	pub(super) fn use_texture_2d_pos(&self, pos: u32, texture: Texture) {
+		unsafe { self.gl.active_texture(TEXTURE0 + pos) }
+		unsafe { self.gl.bind_texture(TEXTURE_2D, Some(texture)) }
+	}
+
 	pub(super) fn use_framebuffer(&self, fbo: Option<Framebuffer>) {
 		unsafe { self.gl.bind_framebuffer(FRAMEBUFFER, fbo) }
 	}
