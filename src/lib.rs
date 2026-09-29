@@ -52,6 +52,7 @@ use std::env::set_var;
 use std::fmt::Display;
 use std::panic::{AssertUnwindSafe, catch_unwind, take_hook};
 use std::ptr::{from_raw_parts, null};
+use crate::mui::rendering3d::{SimpleLine3dGeom, SimpleQuad3dGeom};
 
 #[derive(From)]
 struct FerriciaError(String);
@@ -1211,6 +1212,28 @@ jni_ferricia! {
 			arr2[1],
 			(arr3[0] as _, arr3[1] as _, arr3[2] as _),
 		)
+	}
+}
+
+jni_ferricia! {
+	client:Gwr.newLineGeom(mut env: JNIEnv, class: JClass, handle: jlong, data: jfloatArray) -> jlongArray {
+		jni_get_arr!(arr = JFloatArray; data, env);
+		jni_to_destructed_ptr!(SimpleLine3dGeom::new(jni_ref_ptr::<WindowHandle>(handle).gl_handle(), [
+			Vec3::from_column_slice(&arr[0..3]),
+			Vec3::from_column_slice(&arr[3..6]),
+		]), dyn Render3dPrimitive, env);
+	}
+}
+
+jni_ferricia! {
+	client:Gwr.newQuadGeom(mut env: JNIEnv, class: JClass, handle: jlong, data: jfloatArray) -> jlongArray {
+		jni_get_arr!(arr = JFloatArray; data, env);
+		jni_to_destructed_ptr!(SimpleQuad3dGeom::new(jni_ref_ptr::<WindowHandle>(handle).gl_handle(), [
+			Vec3::from_column_slice(&arr[0..3]),
+			Vec3::from_column_slice(&arr[3..6]),
+			Vec3::from_column_slice(&arr[6..9]),
+			Vec3::from_column_slice(&arr[9..12]),
+		]), dyn Render3dPrimitive, env);
 	}
 }
 
