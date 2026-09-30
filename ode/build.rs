@@ -111,7 +111,7 @@ fn main() {
 	let bindings = bindgen::Builder::default()
 		.header(dst.join("include/ode/ode.h").to_string_lossy())
 		.parse_callbacks(Box::new(IgnoreMacros::new()))
-		.allowlist_function("d.*")
+		.allowlist_item("d.*")
 		.clang_arg(format!("-I{}", dst.join("include").to_str().unwrap()))
 		.layout_tests(false)
 		.generate().unwrap();
