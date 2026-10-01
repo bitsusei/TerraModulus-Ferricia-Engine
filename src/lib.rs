@@ -1403,6 +1403,8 @@ jni_ferricia! {
 	Physics.newMassSphereTotal(mut env: JNIEnv, class: JClass, mass_val: jdouble, radius: jdouble) -> jlong {
 		let mut mass = OdeMass::new();
 		mass.set_sphere_total(mass_val, radius);
+		// Extremely high angular inertia to prevent rolling
+		mass.set_parameters(mass_val, 0., 0., 0., 1E30, 1E30, 1E30, 0., 0., 0.);
 		jni_to_ptr(mass)
 	}
 }
